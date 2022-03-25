@@ -16,13 +16,11 @@ contract Vault is IVault, Ownable {
 
     address public immutable allowedNFT;
     IRewardToken public rewardToken;
-    uint256 public immutable baseValue;
     mapping(uint256 => RegistrationMetadata) registeredTokens;
 
     mapping(uint256 => mapping(address => bool)) approvals;
 
-    constructor(address _allowedNFT, uint256 _baseValue) {
-        baseValue = _baseValue;
+    constructor(address _allowedNFT) {
         allowedNFT = _allowedNFT;
     }
 
@@ -47,7 +45,7 @@ contract Vault is IVault, Ownable {
         );
         address owner = IERC721(allowedNFT).ownerOf(tokenID);
         registeredTokens[tokenID].owner = owner;
-        registeredTokens[tokenID].value = baseValue;
+        registeredTokens[tokenID].value = 50e18;
         registeredTokens[tokenID].stakeTime = block.timestamp;
         IERC721(allowedNFT).transferFrom(owner, address(this), tokenID);
         emit NFTRegistered(owner, tokenID);

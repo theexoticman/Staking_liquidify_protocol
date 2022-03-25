@@ -20,7 +20,7 @@ describe("Vault tests", function () {
         const RewardToken = await ethers.getContractFactory("RewardToken");
         [owner, alice, bob] = await ethers.getSigners();
         nft = await SimpleNFT.deploy();
-        vault = await Vault.deploy(nft.address, scale(100));
+        vault = await Vault.deploy(nft.address);
         rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
         const tx = await vault.setRewardToken(rewardToken.address)
         await tx.wait()
