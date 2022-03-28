@@ -10,5 +10,7 @@ interface IVault {
 
     function unstakeNFT(uint256 tokenID) external;
 
+    function claimRewards() external;
+
     function adminMint(address account, uint256 amount) external;
 }

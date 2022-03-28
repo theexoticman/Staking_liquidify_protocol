@@ -62,6 +62,10 @@ contract Vault is IVault, Ownable {
         emit NFTUnregistered(owner, tokenID);
     }
 
+    function claimRewards() external override {
+        // TODO: Implement the reward claiming logic
+    }
+
     function _isAuthorized(uint256 tokenID, address user)
         internal
         view
