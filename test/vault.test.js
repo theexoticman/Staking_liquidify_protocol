@@ -14,8 +14,9 @@ describe("Vault tests", function () {
     let owner;
     let alice;
     let bob;
+    let Vault;
     beforeEach(async function () {
-        const Vault = await ethers.getContractFactory("Vault");
+        Vault = await ethers.getContractFactory("Vault");
         const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
         const RewardToken = await ethers.getContractFactory("RewardToken");
         [owner, alice, bob] = await ethers.getSigners();
@@ -25,6 +26,12 @@ describe("Vault tests", function () {
         const tx = await vault.setRewardToken(rewardToken.address)
         await tx.wait()
     })
+
+    
+    it("Prevent Allowed NFT in Vault to be zero account", async function () {        
+        await expect( Vault.deploy("0x0000000000000000000000000000000000000000")).to.be.revertedWith("Zero account cannot be used");
+    });
+
     it("Should allow the staking of NFTs with transfer of ownership", async function () {
         const tx1 = await nft.mint(alice.address)
         const tx2 = await nft.mint(bob.address)

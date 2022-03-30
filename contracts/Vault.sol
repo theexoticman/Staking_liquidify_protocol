@@ -21,6 +21,7 @@ contract Vault is IVault, Ownable {
     mapping(uint256 => mapping(address => bool)) approvals;
 
     constructor(address _allowedNFT) {
+        require(address(_allowedNFT) != address(0), "Zero account cannot be used");
         allowedNFT = _allowedNFT;
     }
 
