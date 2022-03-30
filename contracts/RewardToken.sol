@@ -12,6 +12,7 @@ contract RewardToken is ERC20, IRewardToken {
         string memory symbol_,
         address _minter
     ) ERC20(name_, symbol_) {
+        require(address(_minter) != address(0), "mint zero address");
         minter = _minter;
     }
 
