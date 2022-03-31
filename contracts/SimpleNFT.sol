@@ -4,7 +4,6 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-
 // NFT contract used for staking in the Vault
 contract SimpleNFT is ERC721, Ownable {
     uint256 public totalSupply;
@@ -12,12 +11,13 @@ contract SimpleNFT is ERC721, Ownable {
 
     constructor() ERC721("SimpleNFT", "NFT") {}
 
+
     function _baseURI() internal view virtual override returns (string memory) {
         return "www.SimpleNFTURI.com/";
     }
 
     function mint(address account) external onlyOwner returns (uint256) {
-        uint256 newItemId = totalSupply + 1;
+        uint256 newItemId = totalSupply; // starting the elements index at 0 instead of 1.
         _safeMint(account, newItemId);
         totalSupply += 1;
         emit NFTMinted(account, newItemId);
