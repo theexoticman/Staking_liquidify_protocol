@@ -15,8 +15,8 @@ describe("Reward Token tests", function () {
     })
 
     
-    it("Prevent RewardToken Minter to be zero account", async function () {        
-        await expect( RewardToken.deploy("RewardToken", "RT","0x0000000000000000000000000000000000000000")).to.be.revertedWith("mint zero address");
+    it("Prevent RewardToken Minter to be zero account", async function () {
+        await expect( RewardToken.deploy("RewardToken", "RT","0x0000000000000000000000000000000000000000") ).to.be.revertedWith("mint zero address");
     });
 
 });

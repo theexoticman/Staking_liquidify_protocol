@@ -6,7 +6,7 @@ import "../interfaces/IRewardToken.sol";
 // Simple ERC20 token to be distributed as a reward to NFT stakers
 contract RewardToken is ERC20, IRewardToken {
     address public immutable minter;
-
+     
     constructor(
         string memory name_,
         string memory symbol_,
@@ -20,4 +20,8 @@ contract RewardToken is ERC20, IRewardToken {
         require(msg.sender == minter, "Only minter can mint reward tokens");
         _mint(account, amount);
     }
+
+     function decimals() public view virtual override returns (uint8) {
+        return 16;
+    }   
 }
