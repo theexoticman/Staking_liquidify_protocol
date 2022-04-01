@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 // NFT contract used for staking in the Vault
 contract SimpleNFT is ERC721, Ownable {
     uint256 public totalSupply;
-    event NFTMinted(address account, uint256 tokenID);
+    event NFTMinted(address account, uint256 tokenId);
 
     constructor() ERC721("SimpleNFT", "NFT") {}
 
@@ -24,11 +24,11 @@ contract SimpleNFT is ERC721, Ownable {
         return newItemId;
     }
 
-    function isApprovedOrOwner(address user, uint256 tokenID)
+    function isApprovedOrOwner(address user, uint256 tokenId)
         external
         view
         returns (bool)
     {
-        return _isApprovedOrOwner(user, tokenID);
+        return _isApprovedOrOwner(user, tokenId);
     }
 }

@@ -15,28 +15,35 @@ contract Vault is IVault, Ownable {
     using SafeMath for uint256;
     //using SafeERC20 for IERC20;
 
-    uint8 RANDOM_MODULO = 50;
-    uint256 lockTime = 1; //432000  5 days
+    uint8 private constant _RANDOMMODULO = 50;
+    uint256 private constant _LOCKTIME = 5 days;
 
     struct RegistrationMetadata {
         address owner;
         uint256 value;
         uint256 stakeTime;
         uint256 rewardSnapshotTime;
-        uint256 reward  ;
-        bool isStacked;
-        bool isRewardEligible;
+        uint256 reward;
+        bool isStaked;
     }
-    
+    struct NFTFroFractionsMetadata {
+        address owner;
+        uint256 value;
+        uint256 stakeTime;
+        bool isRedeemed;
+        bool isStaked;
+    }
 
-    /*  // mapping player and its stacked NFT
+    /*  // mapping player and its staked NFT
     mapping(address => uint256[]) public playersNFT;
  */
     address public immutable allowedNFT;
     IRewardToken public rewardToken;
     IStakingFractionToken public stakingFractionToken;
 
-   
+    // Managing classic NFT staking.
+    mapping(uint256 => NFTFroFractionsMetadata)
+        public stakingToFractionRegistry;
 
     // Managing classic NFT staking.
     mapping(uint256 => RegistrationMetadata) public registeredTokens;
@@ -75,82 +82,129 @@ contract Vault is IVault, Ownable {
         _mintRewards(account, amount);
     }
 
-    function stakeNFT(uint256 tokenID) external override {
-        require(_isAuthorized(tokenID, msg.sender), "Unauthorized user");
+    function stakeNFT(uint256 tokenId) external override {
         require(
-            _isAuthorized(tokenID, address(this)),
+            stakingToFractionRegistry[tokenId].isStaked == false,
+            "Already staked for fractions"
+        );
+        require(_isAuthorized(tokenId, msg.sender), "Unauthorized user");
+        require(
+            _isAuthorized(tokenId, address(this)),
             "Vault requeries authorization"
         );
 
-        address owner = IERC721(allowedNFT).ownerOf(tokenID);
+        address owner = IERC721(allowedNFT).ownerOf(tokenId);
 
-        /* // add NFT to user lists.
-        playersNFT[msg.sender].push(tokenID);
- */
-        registeredTokens[tokenID].owner = owner;
-        registeredTokens[tokenID].value = unsafeNFTRandomValue();
-        registeredTokens[tokenID].stakeTime = block.timestamp;
-        registeredTokens[tokenID].rewardSnapshotTime = block.timestamp;
-        registeredTokens[tokenID].isStacked = true;
-        registeredTokens[tokenID].isRewardEligible = true;
+        registeredTokens[tokenId].owner = owner;
+        registeredTokens[tokenId].value = unsafeNFTRandomValue();
+        registeredTokens[tokenId].stakeTime = block.timestamp;
+        registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
+        registeredTokens[tokenId].isStaked = true;
 
-        IERC721(allowedNFT).transferFrom(owner, address(this), tokenID);
-        emit NFTRegistered(owner, tokenID);
+        IERC721(allowedNFT).transferFrom(owner, address(this), tokenId);
+        emit NFTRegistered(owner, tokenId);
     }
 
-    function unstakeNFT(uint256 tokenID) external override {
+    function unstakeNFT(uint256 tokenId) external override {
         require(
-            msg.sender == registeredTokens[tokenID].owner,
+            msg.sender == registeredTokens[tokenId].owner,
             "Only owner can unstake"
         );
-        address owner = registeredTokens[tokenID].owner;
+        address owner = registeredTokens[tokenId].owner;
 
-        /*         console.log("current owner - volt contract");
-        console.log(IERC721(allowedNFT).ownerOf(tokenID));
-        console.log("approved - volt contract");
-        console.log(IERC721(allowedNFT).getApproved(tokenID)); */
+        IERC721(allowedNFT).transferFrom(address(this), owner, tokenId);
 
-        IERC721(allowedNFT).transferFrom(address(this), owner, tokenID);
+        // Just keep the reward and the Owner for a reward staked NFT
+        delete registeredTokens[tokenId].value;
+        delete registeredTokens[tokenId].stakeTime;
+        delete registeredTokens[tokenId].rewardSnapshotTime;
+        delete registeredTokens[tokenId].isStaked;
 
-        delete registeredTokens[tokenID].stakeTime;
-        delete registeredTokens[tokenID].rewardSnapshotTime;
-        delete registeredTokens[tokenID].value;
+        emit NFTUnregistered(owner, tokenId);
+    }
 
-        registeredTokens[tokenID].isStacked = false;
+    function stakeNFTFractions(uint256 tokenId) external override {
+        require(
+            !registeredTokens[tokenId].isStaked,
+            "Already staked for rewards"
+        );
+        require(_isAuthorized(tokenId, msg.sender), "Unauthorized user");
+        require(
+            _isAuthorized(tokenId, address(this)),
+            "Vault requeries authorization"
+        );
 
-        emit NFTUnregistered(owner, tokenID);
+        address owner = IERC721(allowedNFT).ownerOf(tokenId);
+
+        stakingToFractionRegistry[tokenId].owner = owner;
+        stakingToFractionRegistry[tokenId].value = unsafeNFTRandomValue();
+        stakingToFractionRegistry[tokenId].isStaked = true;
+        stakingToFractionRegistry[tokenId].stakeTime = block.timestamp;
+        stakingToFractionRegistry[tokenId].isRedeemed = false;
+
+        IERC721(allowedNFT).transferFrom(owner, address(this), tokenId);
+
+        emit NFTRegisteredForFractions(owner, tokenId);
     }
 
     /**
-     * @dev User that stacked their NFT can claim their Reward Tokens
+     *
+     *TokenId, selected NFT
+     *
+     */
+    function acquireNFTwithFractions(uint256 tokenId) external override {
+        require(
+            stakingToFractionRegistry[tokenId].isStaked,
+            "Token is not staked."
+        );
+        require(
+            IStakingFractionToken(stakingFractionToken).balanceOf(msg.sender) >
+                stakingToFractionRegistry[tokenId].value,
+            "Not enough funds."
+        );
+        uint256 value = stakingToFractionRegistry[tokenId].value;
+        address owner = registeredTokens[tokenId].owner;
+        // Burn the token
+        stakingFractionToken.burn(msg.sender, value);
+        delete registeredTokens[tokenId];
+
+        IERC721(allowedNFT).transferFrom(address(this), msg.sender, tokenId);
+
+        emit NFTUnregisteredForFractions(owner, tokenId);
+    }
+
+    /**
+     * @dev User that staked their NFT can claim their Reward Tokens
      *
      * Deletes registration metadata before minting token to prevent reentrency/ race condition attacks
      *
      */
-    function claimRewards(uint256 tokenId) external override {
+    function claimRewardTokens(uint256 tokenId) external override {
         address sender = msg.sender;
+        require(registeredTokens[tokenId].reward > 0, "No reward available");
         require(
             registeredTokens[tokenId].owner == sender,
             "Only owner can claim StakingRewardTokens"
         );
-        uint256 reward = updateReward(tokenId);
-        delete registeredTokens[tokenId]; // prevent race condition attacks
+        uint256 reward = registeredTokens[tokenId].reward;
+        delete registeredTokens[tokenId].reward; // prevent race condition attacks
+
         _mintRewards(sender, reward);
     }
 
-    function _isAuthorized(uint256 tokenID, address user)
+    function _isAuthorized(uint256 tokenId, address user)
         internal
         view
         returns (bool)
     {
-        return SimpleNFT(allowedNFT).isApprovedOrOwner(user, tokenID);
+        return SimpleNFT(allowedNFT).isApprovedOrOwner(user, tokenId);
     }
 
-    function _isStaked(uint256 tokenID) internal view returns (bool) {
-        uint256 value = registeredTokens[tokenID].value;
+    /* function isStaked(uint256 tokenId) internal view returns (bool) {
+        uint256 value = registeredTokens[tokenId].value;
         return
-            value != 0 && IERC721(allowedNFT).ownerOf(tokenID) == address(this);
-    }
+            value != 0 && IERC721(allowedNFT).ownerOf(tokenId) == address(this);
+    } */
 
     function _mintRewards(address account, uint256 amount) internal {
         require(
@@ -172,7 +226,7 @@ contract Vault is IVault, Ownable {
         uint256 random = uint256(
             keccak256(abi.encodePacked(block.difficulty, block.timestamp))
         );
-        uint256 randomValue = uint256((random % RANDOM_MODULO) + 1); // between 1 and 50
+        uint256 randomValue = uint256((random % _RANDOMMODULO) + 1); // between 1 and 50
         return randomValue;
     }
 
@@ -189,13 +243,13 @@ contract Vault is IVault, Ownable {
      * - `previousTimestamp` the last time the reward was calculated.
      *
      */
-    function _calculateNFTStackedReward(
+    function _calculateNFTStakedReward(
         uint256 nftValue,
         uint256 previousTimestamp
     ) internal view returns (uint256) {
         uint256 currentTime = block.timestamp;
-        uint256 delta_stacked = currentTime.sub(previousTimestamp);
-        uint256 reward = nftValue.mul(delta_stacked);
+        uint256 delta_staked = currentTime.sub(previousTimestamp);
+        uint256 reward = nftValue.mul(delta_staked);
         return reward;
     }
 
@@ -208,70 +262,49 @@ contract Vault is IVault, Ownable {
      * When updating the reward, the reward timestamp is updated to current timestamp.
      *
      */
-    function updateReward(uint256 tokenId) public returns (uint256) {
-        uint256 res;
-        require(    
-            msg.sender == registeredTokens[tokenId].owner,
-            "Cannot update someonelse's rewards"
+    function updateReward(uint256 tokenId) public onlyOwner {
+        require(registeredTokens[tokenId].isStaked, "Token not staked");
+
+        //calculaten new reward for the period of time since rewardSnapshotTime
+        uint256 reward = registeredTokens[tokenId].reward.add(
+            _calculateNFTStakedReward(
+                registeredTokens[tokenId].value,
+                registeredTokens[tokenId].rewardSnapshotTime
+            )
         );
-        if (
-            registeredTokens[tokenId].isStacked &&
-            registeredTokens[tokenId].isRewardEligible
-        ) {
-            //calculaten new reward for the period of time since rewardSnapshotTime
-            uint256 reward = registeredTokens[tokenId].reward.add(
-                _calculateNFTStackedReward(
-                    registeredTokens[tokenId].value,
-                    registeredTokens[tokenId].rewardSnapshotTime
-                )
-            );
-            // update time to now
-            registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
-            // update the reward of the nft
-            registeredTokens[tokenId].reward += reward;
-            res = registeredTokens[tokenId].reward;
-        }
-        return res;
+        // update time to now
+        registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
+        // update the reward of the nft
+        registeredTokens[tokenId].reward += reward;
     }
 
-    /**
-     * @dev Get Rewards for a specific User
-     *
-     *
-     * Requirements:
-     *
-     * - `address user` user's reward
-     *
-     *
-     */
-    /*   function getRewards(address user) public view returns (uint256) {
-        uint256 reward;
-        uint256 totalSupply = SimpleNFT(allowedNFT).totalSupply();
-        for (uint256 index = 0; index < totalSupply; index++) {
-            if (registeredTokens[index].owner == user) {
-                reward += registeredTokens[index].reward;
-            }
-        }
-        return reward;
-    } */
-
-    function reedemFractionTokens(uint256 tokenId) public {
+    function redeemFractionTokens(uint256 tokenId) public {
         require(
             address(stakingFractionToken) != address(0),
-            "staking fraction contract not initialized"
+            "Staking fraction contract not initialized"
         );
         require(
-            registeredTokens[tokenId].stakeTime + lockTime < block.timestamp,
+            stakingToFractionRegistry[tokenId].stakeTime + _LOCKTIME <=
+                block.timestamp,
             "Lock period of 5 days"
         );
+        require(
+            stakingToFractionRegistry[tokenId].isStaked,
+            "Token not staked"
+        );
+        require(
+            stakingToFractionRegistry[tokenId].owner == msg.sender,
+            "Only owner can redeem"
+        );
+        require(
+            !stakingToFractionRegistry[tokenId].isRedeemed,
+            "Already redeemed"
+        );
 
-        registeredTokens[tokenId].isRewardEligible = false;
-
-        uint256 value = registeredTokens[tokenId].value;
-
+        uint256 value = stakingToFractionRegistry[tokenId].value;
+        stakingToFractionRegistry[tokenId].isRedeemed = true;
         stakingFractionToken.mint(msg.sender, value);
+
         emit StakingFractionTokenClaimed(msg.sender, value);
     }
-
-
 }
