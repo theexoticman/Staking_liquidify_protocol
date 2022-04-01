@@ -6,8 +6,14 @@ interface IVault {
     event NFTRegisteredForFractions(address indexed owner, uint256 tokenId);
     event NFTUnregisteredForFractions(address indexed owner, uint256 tokenId);
     event NFTUnregistered(address indexed owner, uint256 tokenId);
-    event TokensMinted(address account, uint256 amount);
-    event StakingFractionTokenClaimed(address account, uint256 amount);
+    event RewardTokensMinted(address account, uint256 amount);
+    event StakingFractionTokenRedeemed(address account, uint256 amount);
+
+    //Fraction Events
+    event StakingFractionTokensDeposited(address account, uint256 amount);
+    event StakedFractionTokensWithdrew(address account, uint256 amount);
+    event FractionVaultRewardUpdated(address account, uint256 amount);
+    event RewardTokensClaimed(address account, uint256 amount);
 
     function stakeNFT(uint256 tokenId) external;
 
@@ -21,5 +27,9 @@ interface IVault {
 
     function adminMint(address account, uint256 amount) external;
 
-    //function adminMintStakingToken(address account, uint256 amount) external;
+    //Fraction Vault related
+    function depositStakingFractionTokens(uint256 amount) external;
+    function withdrawStakedFractionTokens(uint256 amount) external;
+    function updateFractionVaultReward(address account) external;
+    function redeemRewardTokensFractionStaking() external;
 }

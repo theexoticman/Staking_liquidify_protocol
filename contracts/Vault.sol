@@ -50,6 +50,25 @@ contract Vault is IVault, Ownable {
 
     mapping(uint256 => mapping(address => bool)) approvals;
 
+    /**
+     *
+     * Fraction Vault
+     *
+     */
+    struct FractionStakingUserInfo {
+        uint256 stakedAmount;
+        uint256 stakeEpoch;
+        uint256 reward;
+    }
+    // List of fraction stackers
+    address[] private stakers;
+
+    // list depositors status
+    mapping(address => bool) private existingStakers;
+
+    // stakers and asscociated amount
+    mapping(address => FractionStakingUserInfo) public stakersContributions;
+
     constructor(address _allowedNFT) {
         require(
             address(_allowedNFT) != address(0),
@@ -92,7 +111,6 @@ contract Vault is IVault, Ownable {
             _isAuthorized(tokenId, address(this)),
             "Vault requeries authorization"
         );
-
         address owner = IERC721(allowedNFT).ownerOf(tokenId);
 
         registeredTokens[tokenId].owner = owner;
@@ -160,7 +178,7 @@ contract Vault is IVault, Ownable {
         require(
             IStakingFractionToken(stakingFractionToken).balanceOf(msg.sender) >
                 stakingToFractionRegistry[tokenId].value,
-            "Not enough funds."
+            "No enough funds."
         );
         uint256 value = stakingToFractionRegistry[tokenId].value;
         address owner = registeredTokens[tokenId].owner;
@@ -212,7 +230,7 @@ contract Vault is IVault, Ownable {
             "reward token contract not initialized"
         );
         rewardToken.mint(account, amount);
-        emit TokensMinted(account, amount);
+        emit RewardTokensMinted(account, amount);
     }
 
     /**
@@ -305,6 +323,110 @@ contract Vault is IVault, Ownable {
         stakingToFractionRegistry[tokenId].isRedeemed = true;
         stakingFractionToken.mint(msg.sender, value);
 
-        emit StakingFractionTokenClaimed(msg.sender, value);
+        emit StakingFractionTokenRedeemed(msg.sender, value);
+    }
+
+    /**
+     *
+     * Fraction Vault
+     *
+     */
+    function depositStakingFractionTokens(uint256 _amount) public override {
+        require(_amount > 0, "deposit more than 0");
+        IStakingFractionToken(stakingFractionToken).transferFrom(
+            msg.sender,
+            address(this),
+            _amount
+        );
+        if (!existingStakers[msg.sender]) {
+            existingStakers[msg.sender] = true;
+            stakers.push(msg.sender);
+        }
+        stakersContributions[msg.sender].stakedAmount = _amount;
+        stakersContributions[msg.sender].stakeEpoch = block.timestamp;
+        emit StakingFractionTokensDeposited(msg.sender, _amount);
+    }
+
+    function withdrawStakedFractionTokens(uint256 _amount) public override {
+        require(_amount > 0, "withraw more than 0");
+        require(
+            stakersContributions[msg.sender].stakedAmount >= _amount,
+            "Not enough funds."
+        );
+        stakersContributions[msg.sender].stakedAmount -= _amount;
+        IStakingFractionToken(stakingFractionToken).transfer(
+            msg.sender,
+            _amount
+        );
+        emit StakedFractionTokensWithdrew(msg.sender, _amount);
+    }
+
+    /**
+     * @dev Updates the reward asscociated with all NFTs
+     *
+     * UpdateReward updates the reward for their staked NFT with latest values.
+     * It calculates the reward based on the time the NFT has been staked.
+     * This function can be called anytime Rewards need to be updated.
+     * When updating the reward, the reward timestamp is updated to current timestamp.
+     *
+     */
+    function updateFractionVaultReward(address account)
+        public
+        override
+        onlyOwner
+    {
+        require(existingStakers[account], "User does not stake.");
+
+        //calculate new reward for the period of time since rewardSnapshotTime
+        uint256 reward = stakersContributions[account].reward.add(
+            _calculateFractionStakingReward(
+                stakersContributions[account].stakedAmount,
+                stakersContributions[account].stakeEpoch
+            )
+        );
+        // update time to now
+        stakersContributions[account].stakeEpoch = block.timestamp;
+        // update the reward of the nft
+        stakersContributions[account].reward += reward;
+        emit FractionVaultRewardUpdated(account, reward);
+    }
+
+    /**
+     * @dev Calculates the Reward associated with an NFT giving its value and time since the last calculation.
+     *
+     * This internal function is called by updateReward to calculate the reward of a specific NFT.
+     * This calculation formula is predefined and result is in wei
+     *
+     *
+     * Requirements:
+     *
+     * - `nftValue` NFT value setup at NFT staking step.
+     * - `previousEpoch` the last time the reward was calculated.
+     *
+     */
+    function _calculateFractionStakingReward(
+        uint256 amount,
+        uint256 previousEpoch
+    ) internal view returns (uint256) {
+        uint256 currentTime = block.timestamp;
+        uint256 delta_staked = currentTime.sub(previousEpoch);
+        uint256 reward = amount.mul(delta_staked);
+        return reward;
+    }
+
+    /**
+     *
+     */
+    function redeemRewardTokensFractionStaking() external override {
+        require(
+            stakersContributions[msg.sender].reward >= 0,
+            "No reward available"
+        );
+        uint256 reward = stakersContributions[msg.sender].reward;
+
+        delete stakersContributions[msg.sender].reward;
+
+        _mintRewards(msg.sender, reward);
+        emit RewardTokensClaimed(msg.sender, reward);
     }
 }
