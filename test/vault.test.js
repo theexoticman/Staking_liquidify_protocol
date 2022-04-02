@@ -7,15 +7,31 @@ function scale(value, decimals = 18) {
   return BigNumber.from(value).mul(BigNumber.from(10).pow(decimals));
 }
 
-function sleep(milliseconds) {
-  const date = Date.now();
-  let currentDate = null;
-  do {
-    currentDate = Date.now();
-  } while (currentDate - date < milliseconds);
-}
+describe("Test application setup", function () {
+  it("Should allow the staking of NFTs with transfer of ownership", async function () {
+    /*     const rStakeAlice = await stakeTxAlice.wait();
+    const rStakeBob = await stakeTxBob.wait();
 
-describe.skip("Vault tests", function () {
+    const stakeIdAlice = rStakeAlice.events.find(
+      (l) => l.event === "NFTRegistered"
+    ).args.tokenId;
+    const stakeOwnerAlice = rStakeAlice.events.find(
+      (l) => l.event === "NFTRegistered"
+    ).args.owner;
+    const stakeIdBob = rStakeBob.events.find((l) => l.event === "NFTRegistered")
+      .args.tokenId;
+    const stakeOwnerBob = rStakeBob.events.find(
+      (l) => l.event === "NFTRegistered"
+    ).args.owner;
+
+    expect(stakeOwnerAlice).to.eq(alice.address);
+    expect(stakeOwnerBob).to.eq(bob.address);
+    expect(stakeIdAlice).to.eq(id1);
+    expect(stakeIdBob).to.eq(id2); */
+  });
+});
+
+describe("Vault tests", function () {
   let nft;
   let vault;
   let rewardToken;
@@ -61,6 +77,10 @@ describe.skip("Vault tests", function () {
     tokenId2 = transaction2.events.find((l) => l.event === "NFTMinted").args
       .tokenId;
 
+    // set NFT price
+    await (await vault.connect(owner).calculateNFTValue(tokenId1)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId2)).wait();
+
     //Approve vault to transfer their NFT on their behalf.
     await (await nft.connect(alice).approve(vault.address, tokenId1)).wait();
     await (await nft.connect(bob).approve(vault.address, tokenId2)).wait();
@@ -77,59 +97,13 @@ describe.skip("Vault tests", function () {
 
   // TODO Refactor this testf
   it("Should allow the staking of NFTs with transfer of ownership", async function () {
-    // Mint 2 new Simple NFTs
-    const tx1 = await nft.mint(alice.address);
-    const tx2 = await nft.mint(bob.address);
-
-    const rcpt1 = await tx1.wait();
-    const rcpt2 = await tx2.wait();
-
-    //starts at 0
-    const id1 = rcpt1.events.find((l) => l.event === "NFTMinted").args.tokenId;
-    const id2 = rcpt2.events.find((l) => l.event === "NFTMinted").args.tokenId;
-
-    //Approve vault to transfer their NFT on their behalf.
-    await nft.connect(alice).approve(vault.address, id1);
-    await nft.connect(bob).approve(vault.address, id2);
-
-    //Check Vault is approved.
-    expect(await nft.getApproved(id1)).to.eq(vault.address);
-    expect(await nft.getApproved(id2)).to.eq(vault.address);
-
-    //Make sure Owners keep ownership
-    expect(await nft.ownerOf(id1)).to.eq(alice.address);
-    expect(await nft.ownerOf(id2)).to.eq(bob.address);
-
-    const stakeTxAlice = await vault.connect(alice).stakeNFT(id1);
-    const stakeTxBob = await vault.connect(bob).stakeNFT(id2);
-
-    const rStakeAlice = await stakeTxAlice.wait();
-    const rStakeBob = await stakeTxBob.wait();
-
-    const stakeIdAlice = rStakeAlice.events.find(
-      (l) => l.event === "NFTRegistered"
-    ).args.tokenId;
-    const stakeOwnerAlice = rStakeAlice.events.find(
-      (l) => l.event === "NFTRegistered"
-    ).args.owner;
-    const stakeIdBob = rStakeBob.events.find((l) => l.event === "NFTRegistered")
-      .args.tokenId;
-    const stakeOwnerBob = rStakeBob.events.find(
-      (l) => l.event === "NFTRegistered"
-    ).args.owner;
-
-    expect(stakeOwnerAlice).to.eq(alice.address);
-    expect(stakeOwnerBob).to.eq(bob.address);
-    expect(stakeIdAlice).to.eq(id1);
-    expect(stakeIdBob).to.eq(id2);
-
     // After Staking, Vault is the new Owner
-    expect(await nft.ownerOf(id1)).to.eq(vault.address);
-    expect(await nft.ownerOf(id2)).to.eq(vault.address);
+    expect(await nft.ownerOf(tokenId1)).to.eq(vault.address);
+    expect(await nft.ownerOf(tokenId2)).to.eq(vault.address);
 
     // Owners unstake their NFTs
-    const unstakeTxAlice = await vault.connect(alice).unstakeNFT(id1);
-    const unstakeTxBob = await vault.connect(bob).unstakeNFT(id2);
+    const unstakeTxAlice = await vault.connect(alice).unstakeNFT(tokenId1);
+    const unstakeTxBob = await vault.connect(bob).unstakeNFT(tokenId2);
 
     const rUnstakeAlice = await unstakeTxAlice.wait();
     const rUnstakeBob = await unstakeTxBob.wait();
@@ -148,12 +122,12 @@ describe.skip("Vault tests", function () {
     ).args.owner;
 
     //erc721.transferFrom give back ownership to owners in the Unstake function.
-    expect(await nft.ownerOf(id1)).to.eq(alice.address);
-    expect(await nft.ownerOf(id2)).to.eq(bob.address);
+    expect(await nft.ownerOf(tokenId1)).to.eq(alice.address);
+    expect(await nft.ownerOf(tokenId2)).to.eq(bob.address);
     expect(unstakeOwnerAlice).to.eq(alice.address);
     expect(unstakeOwnerBob).to.eq(bob.address);
-    expect(unstakeIdAlice).to.eq(id1);
-    expect(unstakeIdBob).to.eq(id2);
+    expect(unstakeIdAlice).to.eq(tokenId1);
+    expect(unstakeIdBob).to.eq(tokenId2);
   });
 
   it("Should allow vault to mint reward tokens", async function () {
@@ -196,7 +170,8 @@ describe.skip("Vault tests", function () {
     const metadata1 = await vault.connect(owner).registeredTokens(tokenId1);
     const metadata2 = await vault.connect(owner).registeredTokens(tokenId2);
 
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", 500);
+
     await vault.connect(owner).updateReward(tokenId1);
     await vault.connect(owner).updateReward(tokenId2);
 
@@ -215,7 +190,8 @@ describe.skip("Vault tests", function () {
       metadata2.rewardSnapshotTime
     );
 
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", [500]);
+
     await vault.connect(owner).updateReward(tokenId1);
     await vault.connect(owner).updateReward(tokenId2);
 
@@ -235,9 +211,10 @@ describe.skip("Vault tests", function () {
     );
   });
 
-  it("Should set isStaked to false when unstaking NFT, value and stakeTime to 0, keeping owner and reward", async function () {
+  it("Should set isStaked to false, stakeTime to 0 when unstaking NFT,  keeping owner and reward and values", async function () {
     //update reward before unstaking
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", [500]);
+
     await vault.connect(owner).updateReward(tokenId1);
 
     await (await vault.connect(alice).unstakeNFT(tokenId1)).wait();
@@ -245,7 +222,7 @@ describe.skip("Vault tests", function () {
     // Retrieve NFTs metadata
     let metadata1 = await vault.connect(owner).registeredTokens(tokenId1);
 
-    expect(metadata1.value).to.eq(0);
+    expect(metadata1.value).to.above(0);
     expect(metadata1.reward).to.above(0);
     expect(metadata1.stakeTime).to.eq(0);
     assert.isFalse(metadata1.isStaked, "should not be staked");
@@ -261,13 +238,17 @@ describe.skip("Vault tests", function () {
     //Approve vault to transfer their NFT on their behalf.
     await nft.connect(alice).approve(vault.address, id1);
 
+    // set NFT price
+    await (await vault.connect(owner).calculateNFTValue(id1)).wait();
+
     // stak the NFT
     const stakeTxAlice = await (
       await vault.connect(alice).stakeNFT(id1)
     ).wait();
 
     //Update reward;
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", [500]);
+
     await vault.connect(owner).updateReward(id1);
 
     let metadata1 = await vault.registeredTokens(id1);
@@ -281,7 +262,7 @@ describe.skip("Vault tests", function () {
   });
   it("NFT Reward should not increase after unstaking", async function () {
     //Update reward;
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", [500]);
     await vault.connect(owner).updateReward(tokenId1);
 
     let tokenMetadata1 = await vault.registeredTokens(tokenId1);
@@ -295,7 +276,7 @@ describe.skip("Vault tests", function () {
     const rewardAfterUnstaking = await rewardToken.balanceOf(alice.address);
 
     //try to Update reward;
-    sleep(500);
+    hre.network.provider.send("evm_increaseTime", [500]);
     await expect(vault.connect(owner).updateReward(tokenId1)).to.revertedWith(
       "Token not staked"
     );
@@ -313,7 +294,7 @@ describe.skip("Vault tests", function () {
   });
 });
 
-describe.skip("Reward Tests", function () {
+describe("Reward Tests", function () {
   let nft;
   let vault;
   let rewardToken;
@@ -359,6 +340,10 @@ describe.skip("Reward Tests", function () {
       .tokenId;
     tokenId2 = transaction2.events.find((l) => l.event === "NFTMinted").args
       .tokenId;
+
+    // set NFT price
+    await (await vault.connect(owner).calculateNFTValue(tokenId1)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId2)).wait();
 
     //Approve vault to transfer their NFT on their behalf.
     await (await nft.connect(alice).approve(vault.address, tokenId1)).wait();
@@ -434,7 +419,7 @@ describe.skip("Reward Tests", function () {
   });
 });
 
-describe.skip("Fraction tokens of NFT", function () {
+describe("Fraction tokens of NFT", function () {
   const FIVE_DAYS = 432000;
 
   let nft;
@@ -511,6 +496,12 @@ describe.skip("Fraction tokens of NFT", function () {
     await (await nft.connect(alice).approve(vault.address, tokenId3)).wait();
     await (await nft.connect(bob).approve(vault.address, tokenId4)).wait();
 
+    // set NFT price
+    await (await vault.connect(owner).calculateNFTValue(tokenId1)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId2)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId3)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId4)).wait();
+
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
@@ -585,7 +576,7 @@ describe.skip("Fraction tokens of NFT", function () {
     ).wait();
 
     const args = res.events.find(
-      (l) => l.event === "StakingFractionTokenClaimed"
+      (l) => l.event === "StakingFractionTokenRedeemed"
     ).args;
 
     expect(args.account).to.eq(alice.address);
@@ -616,6 +607,7 @@ describe("Fraction Vault tests", function () {
   let tokenId1;
   let tokenId2;
 
+  let redeemRes;
   beforeEach(async function () {
     // Collecting contracts
     Vault = await ethers.getContractFactory("Vault");
@@ -658,6 +650,10 @@ describe("Fraction Vault tests", function () {
     await (await nft.connect(alice).approve(vault.address, tokenId1)).wait();
     await (await nft.connect(bob).approve(vault.address, tokenId2)).wait();
 
+    // set NFT price
+    await (await vault.connect(owner).calculateNFTValue(tokenId1)).wait();
+    await (await vault.connect(owner).calculateNFTValue(tokenId2)).wait();
+
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
@@ -668,13 +664,18 @@ describe("Fraction Vault tests", function () {
     ).wait();
 
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
+
+    // redeem staking fraction tokens
+    redeemRes = await (
+      await vault.connect(alice).redeemFractionTokens(tokenId1)
+    ).wait();
+    let val = redeemRes.events.find(
+      (l) => l.event === "StakingFractionTokenRedeemed"
+    ).args;
+    const balance1 = await stakingFractionToken.balanceOf(alice.address);
   });
 
   it("Should be able to deposit Staking Fraction tokens, balance is removed from owner and added to the vault", async function () {
-    let redeemRes = await (
-      await vault.connect(alice).redeemFractionTokens(tokenId1)
-    ).wait();
-
     let val = redeemRes.events.find(
       (l) => l.event === "StakingFractionTokenRedeemed"
     ).args;
@@ -696,10 +697,6 @@ describe("Fraction Vault tests", function () {
   });
 
   it("Reward should evolve overtime and one should be able to collect it", async function () {
-    let redeemRes = await (
-      await vault.connect(alice).redeemFractionTokens(tokenId1)
-    ).wait();
-
     let val = redeemRes.events.find(
       (l) => l.event === "StakingFractionTokenRedeemed"
     ).args;
@@ -724,11 +721,7 @@ describe("Fraction Vault tests", function () {
     expect(balanceReward).to.be.above(0);
   });
 
-  it("Reward should be updated overtime", async function () {
-    let redeemRes = await (
-      await vault.connect(alice).redeemFractionTokens(tokenId1)
-    ).wait();
-
+  it("Reward token should be updated overtime for someone depositing Staking Fraction Tokens", async function () {
     let val = redeemRes.events.find(
       (l) => l.event === "StakingFractionTokenRedeemed"
     ).args;
@@ -759,38 +752,75 @@ describe("Fraction Vault tests", function () {
     expect(balance2).to.be.above(balance1);
   });
   it("One should be able to withdraw part or all their deposit", async function () {
-    let redeemRes = await (
-      await vault.connect(alice).redeemFractionTokens(tokenId1)
-    ).wait();
-
-    let val = redeemRes.events.find(
+    let amount = redeemRes.events.find(
       (l) => l.event === "StakingFractionTokenRedeemed"
-    ).args;
+    ).args.amount;
     const balance1 = await stakingFractionToken.balanceOf(alice.address);
 
-    expect(balance1).to.be.above(0);
+    expect(balance1).to.eq(amount);
+
     stakingFractionToken.connect(alice).approve(vault.address, balance1);
+
     let aliceDeposit = await (
       await vault.connect(alice).depositStakingFractionTokens(balance1)
     ).wait();
+
+    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(0);
+    hre.network.provider.send("evm_increaseTime", [100]);
+
+    await (
+      await vault.connect(owner).updateFractionVaultReward(alice.address)
+    ).wait();
+    let stakedAmount = (await vault.stakersContributions(alice.address))
+      .stakedAmount;
+
+    await (
+      await vault.connect(alice).withdrawStakedFractionTokens(stakedAmount)
+    ).wait();
+
+    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(
+      stakedAmount
+    );
+  });
+
+  it("After withdrawing their deposit, one should still be able to acquire an NFT ", async function () {
+    let amount = redeemRes.events.find(
+      (l) => l.event === "StakingFractionTokenRedeemed"
+    ).args.amount;
+    const balance1 = await stakingFractionToken.balanceOf(alice.address);
+
+    expect(balance1).to.eq(amount);
+
+    stakingFractionToken.connect(alice).approve(vault.address, balance1);
+
+    let aliceDeposit = await (
+      await vault.connect(alice).depositStakingFractionTokens(balance1)
+    ).wait();
+
+    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(0);
 
     hre.network.provider.send("evm_increaseTime", [100]);
 
     await (
       await vault.connect(owner).updateFractionVaultReward(alice.address)
     ).wait();
-    let amountStaked = (await vault.stakersContributions(alice.address))
+    let stakedAmount = (await vault.stakersContributions(alice.address))
       .stakedAmount;
-    console.log(amountStaked);
-    console.log(amountStaked);
-    console.log(amountStaked);
-    console.log(amountStaked);
-    console.log(amountStaked);
 
-    await vault.connect(alice).withdrawStakedFractionTokens(amountStaked);
+    await (
+      await vault.connect(alice).withdrawStakedFractionTokens(stakedAmount)
+    ).wait();
 
     expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(
-      amountStaked 
+      stakedAmount
     );
+
+    const nftAcquisiton = await (
+      await vault.connect(alice).acquireNFTwithFractions(tokenId1)
+    ).wait();
+    const acquiredNftOwner = await nft.ownerOf(tokenId1);
+
+    // expect Alice is the new owner
+    expect(acquiredNftOwner).to.eq(alice.address);
   });
 });

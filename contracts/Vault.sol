@@ -26,7 +26,7 @@ contract Vault is IVault, Ownable {
         uint256 reward;
         bool isStaked;
     }
-    struct NFTFroFractionsMetadata {
+    struct NFTForFractionsMetadata {
         address owner;
         uint256 value;
         uint256 stakeTime;
@@ -41,11 +41,11 @@ contract Vault is IVault, Ownable {
     IRewardToken public rewardToken;
     IStakingFractionToken public stakingFractionToken;
 
-    // Managing classic NFT staking.
-    mapping(uint256 => NFTFroFractionsMetadata)
+    // NFT Fractions staking.
+    mapping(uint256 => NFTForFractionsMetadata)
         public stakingToFractionRegistry;
 
-    // Managing classic NFT staking.
+    // NFT staking.
     mapping(uint256 => RegistrationMetadata) public registeredTokens;
 
     mapping(uint256 => mapping(address => bool)) approvals;
@@ -63,11 +63,14 @@ contract Vault is IVault, Ownable {
     // List of fraction stackers
     address[] private stakers;
 
-    // list depositors status
+    // fraction staking depositors status
     mapping(address => bool) private existingStakers;
 
-    // stakers and asscociated amount
+    // Staking Fractions and asscociated amount
     mapping(address => FractionStakingUserInfo) public stakersContributions;
+
+    // value associated to an NFT
+    mapping(uint256 => uint256) public nftValue;
 
     constructor(address _allowedNFT) {
         require(
@@ -102,25 +105,33 @@ contract Vault is IVault, Ownable {
     }
 
     function stakeNFT(uint256 tokenId) external override {
+        require(nftValue[tokenId] > 0, "set NFT value prior to staking.");
         require(
             stakingToFractionRegistry[tokenId].isStaked == false,
-            "Already staked for fractions"
+            "Already staked for fractions."
         );
         require(_isAuthorized(tokenId, msg.sender), "Unauthorized user");
         require(
             _isAuthorized(tokenId, address(this)),
-            "Vault requeries authorization"
+            "Vault requeries authorization."
         );
         address owner = IERC721(allowedNFT).ownerOf(tokenId);
 
         registeredTokens[tokenId].owner = owner;
-        registeredTokens[tokenId].value = unsafeNFTRandomValue();
+        registeredTokens[tokenId].value = nftValue[tokenId];
         registeredTokens[tokenId].stakeTime = block.timestamp;
         registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
         registeredTokens[tokenId].isStaked = true;
 
         IERC721(allowedNFT).transferFrom(owner, address(this), tokenId);
         emit NFTRegistered(owner, tokenId);
+    }
+
+    /**
+     * To be called before any staking activity
+     */
+    function calculateNFTValue(uint256 tokenId) public onlyOwner {
+        nftValue[tokenId] = unsafeNFTRandomValue();
     }
 
     function unstakeNFT(uint256 tokenId) external override {
@@ -132,8 +143,7 @@ contract Vault is IVault, Ownable {
 
         IERC721(allowedNFT).transferFrom(address(this), owner, tokenId);
 
-        // Just keep the reward and the Owner for a reward staked NFT
-        delete registeredTokens[tokenId].value;
+        // Just keep the reward, Owner and NFT value for a reward staked NFT
         delete registeredTokens[tokenId].stakeTime;
         delete registeredTokens[tokenId].rewardSnapshotTime;
         delete registeredTokens[tokenId].isStaked;
@@ -142,6 +152,7 @@ contract Vault is IVault, Ownable {
     }
 
     function stakeNFTFractions(uint256 tokenId) external override {
+        require(nftValue[tokenId] > 0, "set NFT value prior to staking.");
         require(
             !registeredTokens[tokenId].isStaked,
             "Already staked for rewards"
@@ -155,7 +166,7 @@ contract Vault is IVault, Ownable {
         address owner = IERC721(allowedNFT).ownerOf(tokenId);
 
         stakingToFractionRegistry[tokenId].owner = owner;
-        stakingToFractionRegistry[tokenId].value = unsafeNFTRandomValue();
+        stakingToFractionRegistry[tokenId].value = nftValue[tokenId];
         stakingToFractionRegistry[tokenId].isStaked = true;
         stakingToFractionRegistry[tokenId].stakeTime = block.timestamp;
         stakingToFractionRegistry[tokenId].isRedeemed = false;
@@ -176,9 +187,9 @@ contract Vault is IVault, Ownable {
             "Token is not staked."
         );
         require(
-            IStakingFractionToken(stakingFractionToken).balanceOf(msg.sender) >
+            IStakingFractionToken(stakingFractionToken).balanceOf(msg.sender) >=
                 stakingToFractionRegistry[tokenId].value,
-            "No enough funds."
+            "Not enough funds."
         );
         uint256 value = stakingToFractionRegistry[tokenId].value;
         address owner = registeredTokens[tokenId].owner;
@@ -332,7 +343,7 @@ contract Vault is IVault, Ownable {
      *
      */
     function depositStakingFractionTokens(uint256 _amount) public override {
-        require(_amount > 0, "deposit more than 0");
+        require(_amount > 0, "deposit more than 0 fraction tokens");
         IStakingFractionToken(stakingFractionToken).transferFrom(
             msg.sender,
             address(this),
