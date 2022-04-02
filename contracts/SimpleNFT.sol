@@ -4,7 +4,12 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-// NFT contract used for staking in the Vault
+
+/**
+ * @title an simple NFT specific smart contract
+ * @notice To be used as an ERC721 token.
+ * @dev only the minter can mint new tokens. minter is passed a construction time
+ */
 contract SimpleNFT is ERC721, Ownable {
     uint256 public totalSupply;
     event NFTMinted(address account, uint256 tokenId);

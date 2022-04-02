@@ -1,10 +1,16 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "../interfaces/IStakingFractionToken.sol";
+import "../interfaces/ILiquidNFTToken.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-// Simple ERC20 token to be distributed as a reward to NFT stakers
-contract StakingFractionToken is ERC20, IStakingFractionToken {
+/**
+ * @title an ERC20 specific token implementation.
+ * @author Jean-LoÏc Mugnier
+ * @notice Only used to create liquidity for NFTs, internally. after usage, the NFTs are burnt.
+ * @dev only the minter can mint new tokens. minter is passed a deployment time in constructor.
+ */
+contract LiquidNFTToken is ERC20, ILiquidNFTToken {
     address public immutable minter;
 
     constructor(
@@ -23,16 +29,7 @@ contract StakingFractionToken is ERC20, IStakingFractionToken {
 
     function burn(address account, uint256 amount) external override {
         _burn(account, amount);
-    }
-
-    /**
-     * @dev TODO get the price externally from dex
-     *
-     * returns constant price
-     *
-     */
-    function getPrice() public view override returns (uint256) {
-        return 1**decimals();
+        emit Burn(account, amount);
     }
 
     function decimals() public view virtual override returns (uint8) {

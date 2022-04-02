@@ -13,7 +13,7 @@ describe("Reward Tests setup", function () {
   let nft;
   let vault;
   let rewardToken;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
   let alice;
   let bob;
@@ -37,36 +37,30 @@ describe("Reward Tests setup", function () {
     const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     await tx2.wait();
 
-    // testing the setRewardTokena and setStakingFractionTokens
-    expect(await vault.stakingFractionToken()).to.eq(
-      stakingFractionToken.address
-    );
+    // testing the setRewardTokena and setLiquidNFTTokens
+    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setStakingFractionTokens
+    // testing the setRewardTokena nd setLiquidNFTTokens
     expect(
-      vault.connect(alice).setStakingFractionToken(stakingFractionToken.address)
+      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -117,10 +111,12 @@ describe("Reward Tests setup", function () {
     );
 
     await (
-      await vault.connect(alice).stakeNFT(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(alice)
+        .stakeForRewardToken(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(bob).stakeNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
 
     // test vault is owner after staking
@@ -135,7 +131,7 @@ describe("Reward Tests", function () {
   let nft;
   let vault;
   let rewardToken;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
 
   let alice;
@@ -144,39 +140,33 @@ describe("Reward Tests", function () {
   let aliceNFTTokenStakedForReward;
   let bobNFTTokenStakedForReward;
   beforeEach(async function () {
-    Vault = await ethers.getContractFactory("Vault");
+    const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     await tx2.wait();
 
-    // testing the setRewardTokena and setStakingFractionTokens
-    expect(await vault.stakingFractionToken()).to.eq(
-      stakingFractionToken.address
-    );
+    // testing the setRewardTokena and setLiquidNFTTokens
+    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setStakingFractionTokens
+    // testing the setRewardTokena nd setLiquidNFTTokens
     expect(
-      vault.connect(alice).setStakingFractionToken(stakingFractionToken.address)
+      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -227,10 +217,12 @@ describe("Reward Tests", function () {
     );
 
     await (
-      await vault.connect(alice).stakeNFT(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(alice)
+        .stakeForRewardToken(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(bob).stakeNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
 
     // test vault is owner after staking
@@ -249,10 +241,14 @@ describe("Reward Tests", function () {
   it("Claiming Reward Tokens should not be possible via another account", async function () {
     //update the reward for token 1 and 2
     await (
-      await vault.connect(owner).updateReward(bobNFTTokenStakedForReward)
+      await vault
+        .connect(owner)
+        .updateNFTVaultReward(bobNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(owner)
+        .updateNFTVaultReward(aliceNFTTokenStakedForReward)
     ).wait();
 
     //Bob minted bobNFTTokenStakedForReward
@@ -272,7 +268,7 @@ describe("Reward Tests", function () {
     //update the reward for Alice token before claiming tokens
     let res = await vault
       .connect(owner)
-      .updateReward(aliceNFTTokenStakedForReward);
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
     await res.wait();
 
     let aliceFraction = await (
@@ -299,7 +295,9 @@ describe("Reward Tests", function () {
 
     //update the reward for Alice token 1
     await (
-      await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(owner)
+        .updateNFTVaultReward(aliceNFTTokenStakedForReward)
     ).wait();
 
     aliceFraction = await (
