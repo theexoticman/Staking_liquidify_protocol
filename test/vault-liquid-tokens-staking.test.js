@@ -7,13 +7,13 @@ function scale(value, decimals = 18) {
   return BigNumber.from(value).mul(BigNumber.from(10).pow(decimals));
 }
 
-describe("Fraction Vault tests setup", function () {
+describe("Liquid tokens Vault tests setup", function () {
   const FIVE_DAYS = 432000;
 
   let nft;
   let vault;
   let rewardToken;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
   let alice;
   let bob;
@@ -27,7 +27,7 @@ describe("Fraction Vault tests setup", function () {
    * The following test is used as a beforeEach in the next application testing scenario
    */
 
-  it("Beforeach setup for 'Fraction Vault Test'", async function () {
+  it("Beforeach setup for 'Liquid tokens Vault Test'", async function () {
     /**
      * Setup and deploy smart contracts
      * mint 2 NFT for alice and bob each
@@ -39,9 +39,7 @@ describe("Fraction Vault tests setup", function () {
     Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
 
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
@@ -50,17 +48,15 @@ describe("Fraction Vault tests setup", function () {
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
 
     //Setting relevant variables.
     const tx = await vault.setRewardToken(rewardToken.address);
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -102,61 +98,57 @@ describe("Fraction Vault tests setup", function () {
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
-      await vault.connect(alice).stakeNFTFractions(aliceNFTTokenStakedForReward)
+      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
     ).wait();
     stakeBobReward = await (
-      await vault.connect(bob).stakeNFTFractions(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForReward)
     ).wait();
 
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
 
-    // redeem staking fraction tokens
+    // redeem staking liquid tokens
     redeemRes = await (
       await vault
         .connect(alice)
-        .redeemFractionTokens(aliceNFTTokenStakedForReward)
+        .redeemLiquidTokens(aliceNFTTokenStakedForReward)
     ).wait();
 
     // Test Event is called
     let val = redeemRes.events.find(
-      (l) => l.event === "StakingFractionTokenRedeemed"
+      (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args;
-    depositedFractionsInVault = await stakingFractionToken.balanceOf(
-      alice.address
-    );
+    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
     let amount = redeemRes.events.find(
-      (l) => l.event === "StakingFractionTokenRedeemed"
+      (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args.amount;
 
-    depositedFractionsInVault = await stakingFractionToken.balanceOf(
-      alice.address
-    );
+    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
     expect(depositedFractionsInVault).to.eq(amount);
 
-    // Approve vault smart contract to transfer stakingFractionToken with allowance
-    stakingFractionToken
+    // Approve vault smart contract to transfer liquidNFTToken with allowance
+    liquidNFTToken
       .connect(alice)
       .approve(vault.address, depositedFractionsInVault);
 
-    // Stake all fraction tokens
+    // Stake all liquid tokens
     await (
       await vault
         .connect(alice)
-        .depositStakingFractionTokens(depositedFractionsInVault)
+        .depositLiquidNFTTokens(depositedFractionsInVault)
     ).wait();
 
-    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(0);
+    expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(0);
   });
 });
 
-describe("Fraction Vault tests", function () {
+describe("Liquid tokens Vault tests", function () {
   const FIVE_DAYS = 432000;
 
   let nft;
   let vault;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
   let alice;
   let bob;
@@ -172,9 +164,7 @@ describe("Fraction Vault tests", function () {
     Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
 
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
@@ -183,17 +173,15 @@ describe("Fraction Vault tests", function () {
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
 
     //Setting relevant variables.
     const tx = await vault.setRewardToken(rewardToken.address);
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -235,71 +223,67 @@ describe("Fraction Vault tests", function () {
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
-      await vault.connect(alice).stakeNFTFractions(aliceNFTTokenStakedForReward)
+      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
     ).wait();
     stakeBobReward = await (
-      await vault.connect(bob).stakeNFTFractions(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForReward)
     ).wait();
 
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
 
-    // redeem staking fraction tokens
+    // redeem staking liquid tokens
     redeemRes = await (
       await vault
         .connect(alice)
-        .redeemFractionTokens(aliceNFTTokenStakedForReward)
+        .redeemLiquidTokens(aliceNFTTokenStakedForReward)
     ).wait();
 
     // Test Event is called
     let val = redeemRes.events.find(
-      (l) => l.event === "StakingFractionTokenRedeemed"
+      (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args;
-    depositedFractionsInVault = await stakingFractionToken.balanceOf(
-      alice.address
-    );
+    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
     let amount = redeemRes.events.find(
-      (l) => l.event === "StakingFractionTokenRedeemed"
+      (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args.amount;
 
-    depositedFractionsInVault = await stakingFractionToken.balanceOf(
-      alice.address
-    );
+    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
     expect(depositedFractionsInVault).to.eq(amount);
 
-    // Approve vault smart contract to transfer stakingFractionToken with allowance
-    stakingFractionToken
+    // Approve vault smart contract to transfer liquidNFTToken with allowance
+    liquidNFTToken
       .connect(alice)
       .approve(vault.address, depositedFractionsInVault);
 
-    // Stake all fraction tokens
+    // Stake all liquid tokens
     await (
       await vault
         .connect(alice)
-        .depositStakingFractionTokens(depositedFractionsInVault)
+        .depositLiquidNFTTokens(depositedFractionsInVault)
     ).wait();
 
-    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(0);
+    expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(0);
   });
 
-  it("Should be able to deposit Staking Fraction tokens, balance is removed from owner and added to the vault", async function () {
+  it("Should be able to deposit Liquidtokens, balance is removed from owner and added to the vault", async function () {
     // getting balance after staking all
-    const balance2 = await stakingFractionToken.balanceOf(alice.address);
+    const balance2 = await liquidNFTToken.balanceOf(alice.address);
 
     expect(balance2).to.eq(0);
     // getting balance after staking all
-    const balance3 = await stakingFractionToken.balanceOf(vault.address);
+    const balance3 = await liquidNFTToken.balanceOf(vault.address);
 
     expect(balance3).to.eq(depositedFractionsInVault);
   });
 
-  it("Reward token amount should be updated overtime for someone depositing Staking Fraction Tokens", async function () {
+  it("Reward token amount should be updated overtime for someone depositing Staking Liquid Tokens", async function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
-    await vault.connect(owner).updateFractionVaultReward(alice.address);
+    await vault.connect(owner).updateLiquidVaultReward(alice.address);
 
-    await vault.connect(alice).redeemRewardTokensFractionStaking();
+    await vault.connect(alice).redeemRewardTokensLiquidStaking();
 
     const balanceReward = await rewardToken.balanceOf(alice.address);
 
@@ -307,7 +291,7 @@ describe("Fraction Vault tests", function () {
 
     hre.network.provider.send("evm_increaseTime", [5000]);
 
-    await vault.connect(alice).redeemRewardTokensFractionStaking();
+    await vault.connect(alice).redeemRewardTokensLiquidStaking();
 
     const balance2 = await rewardToken.balanceOf(alice.address);
 
@@ -318,41 +302,37 @@ describe("Fraction Vault tests", function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
     await (
-      await vault.connect(owner).updateFractionVaultReward(alice.address)
+      await vault.connect(owner).updateLiquidVaultReward(alice.address)
     ).wait();
     let stakedAmount = (await vault.stakersContributions(alice.address))
       .stakedAmount;
 
     await (
-      await vault.connect(alice).withdrawStakedFractionTokens(stakedAmount)
+      await vault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
     ).wait();
 
-    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(
-      stakedAmount
-    );
+    expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(stakedAmount);
   });
 
   it("After withdrawing their deposit, one should still be able to acquire an NFT ", async function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
     await (
-      await vault.connect(owner).updateFractionVaultReward(alice.address)
+      await vault.connect(owner).updateLiquidVaultReward(alice.address)
     ).wait();
     let stakedAmount = (await vault.stakersContributions(alice.address))
       .stakedAmount;
 
     await (
-      await vault.connect(alice).withdrawStakedFractionTokens(stakedAmount)
+      await vault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
     ).wait();
 
-    expect(await stakingFractionToken.balanceOf(alice.address)).to.eq(
-      stakedAmount
-    );
+    expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(stakedAmount);
 
     const nftAcquisiton = await (
       await vault
         .connect(alice)
-        .acquireNFTwithFractions(aliceNFTTokenStakedForReward)
+        .acquireNFTwithLiquidToken(aliceNFTTokenStakedForReward)
     ).wait();
     const acquiredNftOwner = await nft.ownerOf(aliceNFTTokenStakedForReward);
 

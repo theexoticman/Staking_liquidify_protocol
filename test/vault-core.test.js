@@ -13,7 +13,7 @@ describe("Vault core tests setup", function () {
   let nft;
   let vault;
   let rewardToken;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
   let alice;
   let bob;
@@ -37,36 +37,30 @@ describe("Vault core tests setup", function () {
     const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     await tx2.wait();
 
-    // testing the setRewardTokena and setStakingFractionTokens
-    expect(await vault.stakingFractionToken()).to.eq(
-      stakingFractionToken.address
-    );
+    // testing the setRewardTokena and setLiquidNFTTokens
+    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setStakingFractionTokens
+    // testing the setRewardTokena nd setLiquidNFTTokens
     expect(
-      vault.connect(alice).setStakingFractionToken(stakingFractionToken.address)
+      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -117,10 +111,12 @@ describe("Vault core tests setup", function () {
     );
 
     await (
-      await vault.connect(alice).stakeNFT(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(alice)
+        .stakeForRewardToken(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(bob).stakeNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
 
     // test vault is owner after staking
@@ -142,7 +138,7 @@ describe("Vault core tests", function () {
   let nft;
   let vault;
   let rewardToken;
-  let stakingFractionToken;
+  let liquidNFTToken;
   let owner;
   let alice;
   let bob;
@@ -153,36 +149,30 @@ describe("Vault core tests", function () {
     const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
-    const StakingFractionToken = await ethers.getContractFactory(
-      "StakingFractionToken"
-    );
+    const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
-    stakingFractionToken = await StakingFractionToken.deploy(
-      "StakingFractionToken",
+    liquidNFTToken = await LiquidNFTToken.deploy(
+      "LiquidNFTToken",
       "SFT",
       vault.address
     );
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
-    const tx2 = await vault.setStakingFractionToken(
-      stakingFractionToken.address
-    );
+    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
 
     await tx2.wait();
 
-    // testing the setRewardTokena and setStakingFractionTokens
-    expect(await vault.stakingFractionToken()).to.eq(
-      stakingFractionToken.address
-    );
+    // testing the setRewardTokena and setLiquidNFTTokens
+    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setStakingFractionTokens
+    // testing the setRewardTokena nd setLiquidNFTTokens
     expect(
-      vault.connect(alice).setStakingFractionToken(stakingFractionToken.address)
+      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -233,10 +223,12 @@ describe("Vault core tests", function () {
     );
 
     await (
-      await vault.connect(alice).stakeNFT(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(alice)
+        .stakeForRewardToken(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(bob).stakeNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
 
     // test vault is owner after staking
@@ -250,10 +242,10 @@ describe("Vault core tests", function () {
     // Owners unstake their NFTs
     const unstakeTxAlice = await vault
       .connect(alice)
-      .unstakeNFT(aliceNFTTokenStakedForReward);
+      .unstakeForRewardToken(aliceNFTTokenStakedForReward);
     const unstakeTxBob = await vault
       .connect(bob)
-      .unstakeNFT(bobNFTTokenStakedForReward);
+      .unstakeForRewardToken(bobNFTTokenStakedForReward);
 
     const rUnstakeAlice = await unstakeTxAlice.wait();
     const rUnstakeBob = await unstakeTxBob.wait();
@@ -344,8 +336,10 @@ describe("Vault core tests", function () {
 
     hre.network.provider.send("evm_increaseTime", 500);
 
-    await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward);
-    await vault.connect(owner).updateReward(bobNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
+    await vault.connect(bob).updateNFTVaultReward(bobNFTTokenStakedForReward);
 
     // Retrieve NFTs metadata
     const metadata1After = await vault
@@ -368,8 +362,10 @@ describe("Vault core tests", function () {
 
     hre.network.provider.send("evm_increaseTime", [500]);
 
-    await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward);
-    await vault.connect(owner).updateReward(bobNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
+    await vault.connect(bob).updateNFTVaultReward(bobNFTTokenStakedForReward);
 
     // Retrieve staked for reward NFTs metadata
     const metadata1After2 = await vault
@@ -395,10 +391,14 @@ describe("Vault core tests", function () {
     //update reward before unstaking
     hre.network.provider.send("evm_increaseTime", [500]);
 
-    await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
 
     await (
-      await vault.connect(alice).unstakeNFT(aliceNFTTokenStakedForReward)
+      await vault
+        .connect(alice)
+        .unstakeForRewardToken(aliceNFTTokenStakedForReward)
     ).wait();
 
     // Retrieve NFTs metadata
@@ -420,13 +420,17 @@ describe("Vault core tests", function () {
     //fast forward
     hre.network.provider.send("evm_increaseTime", [500]);
 
-    await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
 
     let aliceReward = (
       await vault.registeredNFTForReward(aliceNFTTokenStakedForReward)
     ).reward;
 
-    await vault.connect(alice).unstakeNFT(aliceNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .unstakeForRewardToken(aliceNFTTokenStakedForReward);
 
     await (
       await vault.connect(alice).claimRewardTokens(aliceNFTTokenStakedForReward)
@@ -444,7 +448,9 @@ describe("Vault core tests", function () {
     //fast forward
     hre.network.provider.send("evm_increaseTime", [500]);
 
-    await vault.connect(owner).updateReward(aliceNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .updateNFTVaultReward(aliceNFTTokenStakedForReward);
 
     let tokenMetadata1 = await vault.registeredNFTForReward(
       aliceNFTTokenStakedForReward
@@ -456,7 +462,9 @@ describe("Vault core tests", function () {
     ).wait();
 
     // alice unstake
-    await vault.connect(alice).unstakeNFT(aliceNFTTokenStakedForReward);
+    await vault
+      .connect(alice)
+      .unstakeForRewardToken(aliceNFTTokenStakedForReward);
 
     const rewardAfterUnstaking = await rewardToken.balanceOf(alice.address);
 
@@ -464,7 +472,7 @@ describe("Vault core tests", function () {
     hre.network.provider.send("evm_increaseTime", [500]);
 
     await expect(
-      vault.connect(owner).updateReward(aliceNFTTokenStakedForReward)
+      vault.connect(alice).updateNFTVaultReward(aliceNFTTokenStakedForReward)
     ).to.revertedWith("Token not staked");
 
     // try to get reward

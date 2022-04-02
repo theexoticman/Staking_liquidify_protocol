@@ -5,28 +5,61 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./SimpleNFT.sol";
 import "../interfaces/IRewardToken.sol";
-import "../interfaces/IStakingFractionToken.sol";
+import "../interfaces/ILiquidNFTToken.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "hardhat/console.sol";
 
-// Allows staking of NFTs and can mint rewards in accordance
+/**
+ * @title A vault for staking NFTs and ERC20 tokens
+ * @author Jean-LoÏc Mugnier
+ * @notice Such contract can be used to stake NFT that will generate reedemable ERC20 type of token overtime, while NFT is Staked.
+ * @dev fully tested. v1.
+ */
 contract Vault is IVault, Ownable {
     using SafeMath for uint256;
     //using SafeERC20 for IERC20;
 
-    uint8 private constant _RANDOMMODULO = 50;
-    uint256 private constant _LOCKTIME = 5 days;
+    /**
+     *
+     * Generic state variables
+     *
+     */
+    uint8 public constant _RANDOMMODULO = 50;
+    uint256 public constant _LOCKTIME = 5 days;
 
-    struct RegistrationMetadata {
+    address public immutable allowedNFT;
+
+    IRewardToken public rewardToken;
+    ILiquidNFTToken public liquidNFTToken;
+    // value associated to an NFT
+    mapping(uint256 => uint256) public nftValue;
+
+    /**
+     *
+     * NFT for reward staking
+     *
+     */
+
+    struct NFTForRewardMetadata {
         address owner;
         uint256 value;
         uint256 stakeTime;
-        uint256 rewardSnapshotTime;
+        uint256 rewardCalculationEpoch;
         uint256 reward;
         bool isStaked;
     }
-    struct NFTForFractionsMetadata {
+
+    // NFT staking for reward
+    mapping(uint256 => NFTForRewardMetadata) public registeredNFTForReward;
+
+    /**
+     *
+     * NFT for liquid staking
+     *
+     */
+
+    struct NFTForLiquidMetadata {
         address owner;
         uint256 value;
         uint256 stakeTime;
@@ -34,43 +67,28 @@ contract Vault is IVault, Ownable {
         bool isStaked;
     }
 
-    /*  // mapping player and its staked NFT
-    mapping(address => uint256[]) public playersNFT;
- */
-    address public immutable allowedNFT;
-    IRewardToken public rewardToken;
-    IStakingFractionToken public stakingFractionToken;
-
-    // NFT Fractions staking.
-    mapping(uint256 => NFTForFractionsMetadata)
-        public stakingToFractionRegistry;
-
-    // NFT staking.
-    mapping(uint256 => RegistrationMetadata) public registeredTokens;
-
-    mapping(uint256 => mapping(address => bool)) approvals;
+    // NFT staking for liquid tokens.
+    mapping(uint256 => NFTForLiquidMetadata)
+        public registeredNFTForLiquidNFTToken;
 
     /**
      *
-     * Fraction Vault
+     * Liquid Vault Part
      *
      */
-    struct FractionStakingUserInfo {
+    struct LiquidStakingUserInfo {
         uint256 stakedAmount;
         uint256 stakeEpoch;
         uint256 reward;
     }
-    // List of fraction stackers
-    address[] private stakers;
+    // List of liquid stackers
+    address[] private liquidStakers;
 
-    // fraction staking depositors status
+    // liquid staking depositors status
     mapping(address => bool) private existingStakers;
 
-    // Staking Fractions and asscociated amount
-    mapping(address => FractionStakingUserInfo) public stakersContributions;
-
-    // value associated to an NFT
-    mapping(uint256 => uint256) public nftValue;
+    // LiquidNFTToken s and asscociated amount
+    mapping(address => LiquidStakingUserInfo) public stakersContributions;
 
     constructor(address _allowedNFT) {
         require(
@@ -80,355 +98,365 @@ contract Vault is IVault, Ownable {
         allowedNFT = _allowedNFT;
     }
 
+    /**
+     *
+     * Core Functions
+     *
+     */
+    /**
+     * @notice set the reward token ERC20 token smart contract address
+     * @dev dependency on rewardtoken smart contract. deploy it and set its address here.
+     * @param _rewardToken the reward token address
+     */
     function setRewardToken(address _rewardToken) external onlyOwner {
         require(address(rewardToken) == address(0), "reward token already set");
         rewardToken = IRewardToken(_rewardToken);
     }
 
-    function setStakingFractionToken(address _stakingFractionToken)
-        external
-        onlyOwner
-    {
+    /**
+     * @notice set the liquid ERC20 token smart contract address
+     * @dev dependency on _liquidNFTToken smart contract. deploy it and set its address here.
+     * @param _liquidNFTToken The number of rings from dendrochronological sample
+     
+     */
+    function setLiquidNFTToken(address _liquidNFTToken) external onlyOwner {
         require(
-            address(stakingFractionToken) == address(0),
-            "staking fraction token already set"
+            address(liquidNFTToken) == address(0),
+            "LiquidNFTToken token already set"
         );
-        stakingFractionToken = IStakingFractionToken(_stakingFractionToken);
+        liquidNFTToken = ILiquidNFTToken(_liquidNFTToken);
     }
 
-    function adminMint(address account, uint256 amount)
-        external
+    /**
+     * @notice Mints new reward token.
+     * @dev only owner should be able to mint.
+     * @param _account minting tokens to this accounts.
+     * @param _amount minting _amount tokens.
+     */
+    function adminMint(address _account, uint256 _amount)
+        public
         override
         onlyOwner
     {
-        _mintRewards(account, amount);
-    }
-
-    function stakeNFT(uint256 tokenId) external override {
-        require(nftValue[tokenId] > 0, "set NFT value prior to staking.");
-        require(
-            stakingToFractionRegistry[tokenId].isStaked == false,
-            "Already staked for fractions."
-        );
-        require(_isAuthorized(tokenId, msg.sender), "Unauthorized user");
-        require(
-            _isAuthorized(tokenId, address(this)),
-            "Vault requeries authorization."
-        );
-        address owner = IERC721(allowedNFT).ownerOf(tokenId);
-
-        registeredTokens[tokenId].owner = owner;
-        registeredTokens[tokenId].value = nftValue[tokenId];
-        registeredTokens[tokenId].stakeTime = block.timestamp;
-        registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
-        registeredTokens[tokenId].isStaked = true;
-
-        IERC721(allowedNFT).transferFrom(owner, address(this), tokenId);
-        emit NFTRegistered(owner, tokenId);
+        _mintRewards(_account, _amount);
     }
 
     /**
-     * To be called before any staking activity
+     * @notice To know if _user is authorized to manipulate allowedNFT _tokenId
+     * @dev relies on ERC721 isApprovedOrOwner
+     * @param _tokenId is the user authorized for this token.
+     * @param _user is this user authorized
      */
-    function calculateNFTValue(uint256 tokenId) public onlyOwner {
-        nftValue[tokenId] = unsafeNFTRandomValue();
-    }
-
-    function unstakeNFT(uint256 tokenId) external override {
-        require(
-            msg.sender == registeredTokens[tokenId].owner,
-            "Only owner can unstake"
-        );
-        address owner = registeredTokens[tokenId].owner;
-
-        IERC721(allowedNFT).transferFrom(address(this), owner, tokenId);
-
-        // Just keep the reward, Owner and NFT value for a reward staked NFT
-        delete registeredTokens[tokenId].stakeTime;
-        delete registeredTokens[tokenId].rewardSnapshotTime;
-        delete registeredTokens[tokenId].isStaked;
-
-        emit NFTUnregistered(owner, tokenId);
-    }
-
-    function stakeNFTFractions(uint256 tokenId) external override {
-        require(nftValue[tokenId] > 0, "set NFT value prior to staking.");
-        require(
-            !registeredTokens[tokenId].isStaked,
-            "Already staked for rewards"
-        );
-        require(_isAuthorized(tokenId, msg.sender), "Unauthorized user");
-        require(
-            _isAuthorized(tokenId, address(this)),
-            "Vault requeries authorization"
-        );
-
-        address owner = IERC721(allowedNFT).ownerOf(tokenId);
-
-        stakingToFractionRegistry[tokenId].owner = owner;
-        stakingToFractionRegistry[tokenId].value = nftValue[tokenId];
-        stakingToFractionRegistry[tokenId].isStaked = true;
-        stakingToFractionRegistry[tokenId].stakeTime = block.timestamp;
-        stakingToFractionRegistry[tokenId].isRedeemed = false;
-
-        IERC721(allowedNFT).transferFrom(owner, address(this), tokenId);
-
-        emit NFTRegisteredForFractions(owner, tokenId);
-    }
-
-    /**
-     *
-     *TokenId, selected NFT
-     *
-     */
-    function acquireNFTwithFractions(uint256 tokenId) external override {
-        require(
-            stakingToFractionRegistry[tokenId].isStaked,
-            "Token is not staked."
-        );
-        require(
-            IStakingFractionToken(stakingFractionToken).balanceOf(msg.sender) >=
-                stakingToFractionRegistry[tokenId].value,
-            "Not enough funds."
-        );
-        uint256 value = stakingToFractionRegistry[tokenId].value;
-        address owner = registeredTokens[tokenId].owner;
-        // Burn the token
-        stakingFractionToken.burn(msg.sender, value);
-        delete registeredTokens[tokenId];
-
-        IERC721(allowedNFT).transferFrom(address(this), msg.sender, tokenId);
-
-        emit NFTUnregisteredForFractions(owner, tokenId);
-    }
-
-    /**
-     * @dev User that staked their NFT can claim their Reward Tokens
-     *
-     * Deletes registration metadata before minting token to prevent reentrency/ race condition attacks
-     *
-     */
-    function claimRewardTokens(uint256 tokenId) external override {
-        address sender = msg.sender;
-        require(registeredTokens[tokenId].reward > 0, "No reward available");
-        require(
-            registeredTokens[tokenId].owner == sender,
-            "Only owner can claim StakingRewardTokens"
-        );
-        uint256 reward = registeredTokens[tokenId].reward;
-        delete registeredTokens[tokenId].reward; // prevent race condition attacks
-
-        _mintRewards(sender, reward);
-    }
-
-    function _isAuthorized(uint256 tokenId, address user)
+    function _isAuthorized(uint256 _tokenId, address _user)
         internal
         view
         returns (bool)
     {
-        return SimpleNFT(allowedNFT).isApprovedOrOwner(user, tokenId);
-    }
-
-    /* function isStaked(uint256 tokenId) internal view returns (bool) {
-        uint256 value = registeredTokens[tokenId].value;
-        return
-            value != 0 && IERC721(allowedNFT).ownerOf(tokenId) == address(this);
-    } */
-
-    function _mintRewards(address account, uint256 amount) internal {
-        require(
-            address(rewardToken) != address(0),
-            "reward token contract not initialized"
-        );
-        rewardToken.mint(account, amount);
-        emit RewardTokensMinted(account, amount);
+        return SimpleNFT(allowedNFT).isApprovedOrOwner(_user, _tokenId);
     }
 
     /**
-     * @dev unsafe random number based on block parameters.
-     *
-     * Unsafe pseud random generation.
-     * TODO migrate to Chainlink VRF
-     *
+     * @notice Calculates NFT value. for now, random value is attributed
+     * @dev for now uses a pseudo random algorithm based on nft value
+     * @param _tokenId to be used as a pseudo random value.
+     
      */
-    function unsafeNFTRandomValue() public view returns (uint256) {
+    function calculateNFTValue(uint256 _tokenId) public {
+        nftValue[_tokenId] = unsafeNFTRandomValue(_tokenId);
+    }
+
+    /**
+     * @notice Calculate of random number.
+     * @dev Unsafe random calculation. for random numbers migrate to Chainlink VRF.
+     * @param _pseudoRandomNumber a pseudo random number that the miner does not control.
+     * @return _pseudoRandomNumber a pseudo random number.
+     */
+    function unsafeNFTRandomValue(uint256 _pseudoRandomNumber)
+        public
+        view
+        returns (uint256)
+    {
         uint256 random = uint256(
-            keccak256(abi.encodePacked(block.difficulty, block.timestamp))
+            keccak256(
+                abi.encodePacked(
+                    block.difficulty,
+                    block.timestamp,
+                    _pseudoRandomNumber
+                )
+            )
         );
         uint256 randomValue = uint256((random % _RANDOMMODULO) + 1); // between 1 and 50
         return randomValue;
     }
 
     /**
-     * @dev Calculates the Reward associated with an NFT giving its value and time since the last calculation.
+     * @notice allow a user to stake their NFTs in the vault. After staking they can be rewarded in reward tokens.
+     * @dev NFT value must be calculated with "calculateNFTValue' prior being staked.
+     * @param _tokenId allowedNFT tokenId to be unstaked.
+     */
+    function stakeForRewardToken(uint256 _tokenId) public override {
+        require(nftValue[_tokenId] > 0, "set NFT value prior to staking.");
+        require(
+            registeredNFTForLiquidNFTToken[_tokenId].isStaked == false,
+            "Already staked for liquid."
+        );
+        require(_isAuthorized(_tokenId, msg.sender), "Unauthorized user");
+        require(
+            _isAuthorized(_tokenId, address(this)),
+            "Vault requeries authorization."
+        );
+        address owner = IERC721(allowedNFT).ownerOf(_tokenId);
+
+        registeredNFTForReward[_tokenId].owner = owner;
+        registeredNFTForReward[_tokenId].value = nftValue[_tokenId];
+        registeredNFTForReward[_tokenId].stakeTime = block.timestamp;
+        registeredNFTForReward[_tokenId].rewardCalculationEpoch = block
+            .timestamp;
+        registeredNFTForReward[_tokenId].isStaked = true;
+
+        IERC721(allowedNFT).transferFrom(owner, address(this), _tokenId);
+        emit NFTRegistered(owner, _tokenId);
+    }
+
+    /**
+     * @notice Unstake NFT from the reward staking vault.
+     * @dev unstake but keep reward so user can claim it later.
+     * @param _tokenId allowedNFT tokenId to be unstaked.
+     */
+    function unstakeForRewardToken(uint256 _tokenId) public override {
+        require(
+            msg.sender == registeredNFTForReward[_tokenId].owner,
+            "Only owner can unstake"
+        );
+        address owner = registeredNFTForReward[_tokenId].owner;
+
+        IERC721(allowedNFT).transferFrom(address(this), owner, _tokenId);
+
+        // Just keep the reward, Owner and NFT value for a reward staked NFT
+        delete registeredNFTForReward[_tokenId].stakeTime;
+        delete registeredNFTForReward[_tokenId].rewardCalculationEpoch;
+        delete registeredNFTForReward[_tokenId].isStaked;
+
+        emit NFTUnregistered(owner, _tokenId);
+    }
+
+    /**
+     * @notice Claim reward tokens obtained through NFT staking.
+     * @param _tokenId claim reward associated with allowedNFT tokenId.
+     */
+    function claimRewardTokens(uint256 _tokenId) public override {
+        address sender = msg.sender;
+        require(
+            registeredNFTForReward[_tokenId].reward > 0,
+            "No reward available."
+        );
+        require(
+            registeredNFTForReward[_tokenId].owner == sender,
+            "Only owner can claim StakingRewardTokens."
+        );
+
+        uint256 reward = registeredNFTForReward[_tokenId].reward;
+        delete registeredNFTForReward[_tokenId].reward; // prevent race condition attacks
+
+        _mintRewards(sender, reward);
+    }
+
+    /**
+     * @notice Mints new reward token. Restricted access to contract owner.
+     * @dev Restricted access to contract owner.
+     * @param _account will receive the minted tokens.
+     * @param _amount amount of tokens to be minted.
+     */
+    function _mintRewards(address _account, uint256 _amount) private {
+        require(
+            address(rewardToken) != address(0),
+            "reward token contract not initialized"
+        );
+        rewardToken.mint(_account, _amount);
+        emit RewardTokensMinted(_account, _amount);
+    }
+
+    /**
      *
-     * This internal function is called by updateReward to calculate the reward of a specific NFT.
-     * This calculation formula is predefined and result is in wei
-     *
-     *
-     * Requirements:
-     *
-     * - `nftValue` NFT value setup at NFT staking step.
-     * - `previousTimestamp` the last time the reward was calculated.
+     * NFT Staking for liquid related functions
      *
      */
+
+    /**
+     * @notice Stake NFT and get liquid NFt tokens. Cannot be staked to obtain the reward token.
+     * @dev NFT value must be calculated with "calculateNFTValue' prior being staked. when user exchanges NFT for liquid tokens, they are stored here registeredNFTForLiquidNFTToken.
+     * @param _tokenId allowedNFT tokenId to be staked.
+     */
+    function stakeForLiquidNFT(uint256 _tokenId) public override {
+        require(nftValue[_tokenId] > 0, "set NFT value prior to staking.");
+        require(
+            !registeredNFTForReward[_tokenId].isStaked,
+            "Already staked for rewards."
+        );
+        require(_isAuthorized(_tokenId, msg.sender), "Unauthorized user");
+        require(
+            _isAuthorized(_tokenId, address(this)),
+            "Vault requeries authorization"
+        );
+
+        address owner = IERC721(allowedNFT).ownerOf(_tokenId);
+
+        registeredNFTForLiquidNFTToken[_tokenId].owner = owner;
+        registeredNFTForLiquidNFTToken[_tokenId].value = nftValue[_tokenId];
+        registeredNFTForLiquidNFTToken[_tokenId].isStaked = true;
+        registeredNFTForLiquidNFTToken[_tokenId].stakeTime = block.timestamp;
+        registeredNFTForLiquidNFTToken[_tokenId].isRedeemed = false;
+
+        IERC721(allowedNFT).transferFrom(owner, address(this), _tokenId);
+
+        emit NFTRegisteredForLiquid(owner, _tokenId);
+    }
+
+    /**
+     * @notice allow user to acquire an NFT that is staked. Only NFT that have been exchanged for liquid tokens can be bought this way
+     * @dev tokens are burnt after acquisition and not transfered to previous NFT owner as one may think.
+     * @param _tokenId token to be acquired
+     */
+    function acquireNFTwithLiquidToken(uint256 _tokenId) public override {
+        require(
+            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
+            "Token is not staked."
+        );
+        require(
+            ILiquidNFTToken(liquidNFTToken).balanceOf(msg.sender) >=
+                registeredNFTForLiquidNFTToken[_tokenId].value,
+            "Not enough funds."
+        );
+        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
+        address owner = registeredNFTForReward[_tokenId].owner;
+        // Burn the token
+        liquidNFTToken.burn(msg.sender, value);
+        delete registeredNFTForReward[_tokenId];
+
+        IERC721(allowedNFT).transferFrom(address(this), msg.sender, _tokenId);
+
+        emit NFTUnregisteredForLiquidToken(owner, _tokenId);
+    }
+
+    /**
+     * @notice Calculate the reward for staked NFT.
+     * @dev calculates the reward based on time (block.timestamp)
+     * @param _nftValue value of the NFT
+     * @param _previousEpoch last time rewards were calculated
+     * @return reward reward in reward tokens.
+     */
     function _calculateNFTStakedReward(
-        uint256 nftValue,
-        uint256 previousTimestamp
+        uint256 _nftValue,
+        uint256 _previousEpoch
     ) internal view returns (uint256) {
         uint256 currentTime = block.timestamp;
-        uint256 delta_staked = currentTime.sub(previousTimestamp);
-        uint256 reward = nftValue.mul(delta_staked);
+        uint256 delta_staked = currentTime.sub(_previousEpoch);
+        uint256 reward = _nftValue.mul(delta_staked);
         return reward;
     }
 
     /**
-     * @dev Updates the reward asscociated with all NFTs
-     *
-     * UpdateReward updates the reward for their staked NFT with latest values.
-     * It calculates the reward based on the time the NFT has been staked.
-     * This function can be called anytime Rewards need to be updated.
-     * When updating the reward, the reward timestamp is updated to current timestamp.
-     *
+     * @notice Updates the reward asscociated with the staking of NFT for reward staking
+     * @param _tokenId update the reward for the specific tokenId.
      */
-    function updateReward(uint256 tokenId) public onlyOwner {
-        require(registeredTokens[tokenId].isStaked, "Token not staked");
+    function updateNFTVaultReward(uint256 _tokenId) public override {
+        require(registeredNFTForReward[_tokenId].isStaked, "Token not staked");
 
-        //calculaten new reward for the period of time since rewardSnapshotTime
-        uint256 reward = registeredTokens[tokenId].reward.add(
+        //calculaten new reward for the period of time since rewardCalculationEpoch
+        uint256 reward = registeredNFTForReward[_tokenId].reward.add(
             _calculateNFTStakedReward(
-                registeredTokens[tokenId].value,
-                registeredTokens[tokenId].rewardSnapshotTime
+                registeredNFTForReward[_tokenId].value,
+                registeredNFTForReward[_tokenId].rewardCalculationEpoch
             )
         );
         // update time to now
-        registeredTokens[tokenId].rewardSnapshotTime = block.timestamp;
+        registeredNFTForReward[_tokenId].rewardCalculationEpoch = block
+            .timestamp;
         // update the reward of the nft
-        registeredTokens[tokenId].reward += reward;
+        registeredNFTForReward[_tokenId].reward += reward;
     }
 
-    function redeemFractionTokens(uint256 tokenId) public {
+    /**
+     * @notice Redeems liquid tokens after staking a NFT and waiting after the locking period.
+     * @dev liquidNFTToken address must have been set via setLiquidNFTToken
+     * @param _tokenId the token id of the staked NFT.
+     */
+    function redeemLiquidTokens(uint256 _tokenId) public override {
         require(
-            address(stakingFractionToken) != address(0),
-            "Staking fraction contract not initialized"
+            address(liquidNFTToken) != address(0),
+            "LiquidNFTToken contract not initialized"
         );
         require(
-            stakingToFractionRegistry[tokenId].stakeTime + _LOCKTIME <=
+            registeredNFTForLiquidNFTToken[_tokenId].stakeTime + _LOCKTIME <=
                 block.timestamp,
             "Lock period of 5 days"
         );
         require(
-            stakingToFractionRegistry[tokenId].isStaked,
+            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
             "Token not staked"
         );
         require(
-            stakingToFractionRegistry[tokenId].owner == msg.sender,
+            registeredNFTForLiquidNFTToken[_tokenId].owner == msg.sender,
             "Only owner can redeem"
         );
         require(
-            !stakingToFractionRegistry[tokenId].isRedeemed,
+            !registeredNFTForLiquidNFTToken[_tokenId].isRedeemed,
             "Already redeemed"
         );
 
-        uint256 value = stakingToFractionRegistry[tokenId].value;
-        stakingToFractionRegistry[tokenId].isRedeemed = true;
-        stakingFractionToken.mint(msg.sender, value);
+        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
+        registeredNFTForLiquidNFTToken[_tokenId].isRedeemed = true;
+        liquidNFTToken.mint(msg.sender, value);
 
-        emit StakingFractionTokenRedeemed(msg.sender, value);
+        emit LiquidNFTTokenRedeemed(msg.sender, value);
     }
 
     /**
      *
-     * Fraction Vault
+     * Liquid Vault
      *
      */
-    function depositStakingFractionTokens(uint256 _amount) public override {
-        require(_amount > 0, "deposit more than 0 fraction tokens");
-        IStakingFractionToken(stakingFractionToken).transferFrom(
+
+    /**
+     * @notice Deposits liquid tokens to the staking vault.
+     * @dev before depositing. user must have approved this smart contract to transferFrom their account.
+     * @param _amount amount of tokens to be staked
+     */
+    function depositLiquidNFTTokens(uint256 _amount) public override {
+        require(_amount > 0, "deposit more than 0 liquid tokens");
+        ILiquidNFTToken(liquidNFTToken).transferFrom(
             msg.sender,
             address(this),
             _amount
         );
         if (!existingStakers[msg.sender]) {
             existingStakers[msg.sender] = true;
-            stakers.push(msg.sender);
+            liquidStakers.push(msg.sender);
         }
         stakersContributions[msg.sender].stakedAmount = _amount;
         stakersContributions[msg.sender].stakeEpoch = block.timestamp;
-        emit StakingFractionTokensDeposited(msg.sender, _amount);
+        emit LiquidNFTTokensDeposited(msg.sender, _amount);
     }
 
-    function withdrawStakedFractionTokens(uint256 _amount) public override {
+    /**
+     * @notice Withdraws staked liquid tokens from the staking vault
+     * @param _amount the amount of takens to the withdraw from the staking pool.
+     */
+    function withdrawStakedLiquidTokens(uint256 _amount) public override {
         require(_amount > 0, "withraw more than 0");
         require(
             stakersContributions[msg.sender].stakedAmount >= _amount,
             "Not enough funds."
         );
         stakersContributions[msg.sender].stakedAmount -= _amount;
-        IStakingFractionToken(stakingFractionToken).transfer(
-            msg.sender,
-            _amount
-        );
-        emit StakedFractionTokensWithdrew(msg.sender, _amount);
+        ILiquidNFTToken(liquidNFTToken).transfer(msg.sender, _amount);
+        emit StakedLiquidTokensWithdrew(msg.sender, _amount);
     }
 
     /**
-     * @dev Updates the reward asscociated with all NFTs
-     *
-     * UpdateReward updates the reward for their staked NFT with latest values.
-     * It calculates the reward based on the time the NFT has been staked.
-     * This function can be called anytime Rewards need to be updated.
-     * When updating the reward, the reward timestamp is updated to current timestamp.
-     *
+     * @notice Redeems Reward Tokens for the staked liquid tokens to msg sender.
      */
-    function updateFractionVaultReward(address account)
-        public
-        override
-        onlyOwner
-    {
-        require(existingStakers[account], "User does not stake.");
-
-        //calculate new reward for the period of time since rewardSnapshotTime
-        uint256 reward = stakersContributions[account].reward.add(
-            _calculateFractionStakingReward(
-                stakersContributions[account].stakedAmount,
-                stakersContributions[account].stakeEpoch
-            )
-        );
-        // update time to now
-        stakersContributions[account].stakeEpoch = block.timestamp;
-        // update the reward of the nft
-        stakersContributions[account].reward += reward;
-        emit FractionVaultRewardUpdated(account, reward);
-    }
-
-    /**
-     * @dev Calculates the Reward associated with an NFT giving its value and time since the last calculation.
-     *
-     * This internal function is called by updateReward to calculate the reward of a specific NFT.
-     * This calculation formula is predefined and result is in wei
-     *
-     *
-     * Requirements:
-     *
-     * - `nftValue` NFT value setup at NFT staking step.
-     * - `previousEpoch` the last time the reward was calculated.
-     *
-     */
-    function _calculateFractionStakingReward(
-        uint256 amount,
-        uint256 previousEpoch
-    ) internal view returns (uint256) {
-        uint256 currentTime = block.timestamp;
-        uint256 delta_staked = currentTime.sub(previousEpoch);
-        uint256 reward = amount.mul(delta_staked);
-        return reward;
-    }
-
-    /**
-     *
-     */
-    function redeemRewardTokensFractionStaking() external override {
+    function redeemRewardTokensLiquidStaking() public override {
         require(
             stakersContributions[msg.sender].reward >= 0,
             "No reward available"
@@ -439,5 +467,49 @@ contract Vault is IVault, Ownable {
 
         _mintRewards(msg.sender, reward);
         emit RewardTokensClaimed(msg.sender, reward);
+    }
+
+    /**
+     * @notice Updates _account reward for staked liquid
+     * @dev calculated based on time (block.timestamp)
+     * @param _account account for which we should update the reward
+     */
+    function updateLiquidVaultReward(address _account)
+        public
+        override
+        onlyOwner
+    {
+        require(existingStakers[_account], "User does not stake.");
+
+        // calculate new reward for the period of time since rewardCalculationEpoch
+        uint256 reward = stakersContributions[_account].reward.add(
+            _calculateLiquidStakingReward(
+                stakersContributions[_account].stakedAmount,
+                stakersContributions[_account].stakeEpoch
+            )
+        );
+        // update time to now
+        stakersContributions[_account].stakeEpoch = block.timestamp;
+        // update the reward of the nft
+        stakersContributions[_account].reward += reward;
+        emit LiquidVaultRewardUpdated(_account, reward);
+    }
+
+    /**
+     * @notice Calculates the Reward associated with an NFT giving its value and time since the last calculation.
+     * This internal function is called by updateLiquidVaultReward to calculate the reward for a specific NFT.
+     * @dev reward is based on evolution of time.
+     * @param _amount amount of staked tokens
+     * @param _previousEpoch last time rewards were calculated
+     * @return reward, reward in tokens.
+     */
+    function _calculateLiquidStakingReward(
+        uint256 _amount,
+        uint256 _previousEpoch
+    ) internal view returns (uint256) {
+        uint256 currentTime = block.timestamp;
+        uint256 delta_staked = currentTime.sub(_previousEpoch);
+        uint256 reward = _amount.mul(delta_staked);
+        return reward;
     }
 }
