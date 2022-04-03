@@ -14,14 +14,13 @@ describe("Liquid tokens Vault tests setup", function () {
   let vault;
   let rewardToken;
   let liquidNFTToken;
+  let pricingMechanism;
   let owner;
   let alice;
   let bob;
 
   let aliceNFTTokenStakedForReward;
-  let aliceNFTTokenStakedForFraction;
   let bobNFTTokenStakedForReward;
-  let bobNFTTokenStakedForFraction;
   let depositedFractionsInVault;
   /**
    * The following test is used as a beforeEach in the next application testing scenario
@@ -36,11 +35,13 @@ describe("Liquid tokens Vault tests setup", function () {
      * Stake 2 NFT in the Fraction vault
      */
     // Collecting contracts
-    Vault = await ethers.getContractFactory("Vault");
+    const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
-
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
 
@@ -53,10 +54,16 @@ describe("Liquid tokens Vault tests setup", function () {
       "SFT",
       vault.address
     );
+    pricingMechanism = await PricingMechanism.deploy();
 
     //Setting relevant variables.
-    const tx = await vault.setRewardToken(rewardToken.address);
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
+    const tx = await (await vault.setRewardToken(rewardToken.address)).wait();
+    const tx2 = await (
+      await vault.setLiquidNFTToken(liquidNFTToken.address)
+    ).wait();
+    const tx3 = await (
+      await vault.setPricingMechanism(pricingMechanism.address)
+    ).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -68,12 +75,6 @@ describe("Liquid tokens Vault tests setup", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
     bobNFTTokenStakedForReward = transaction2.events.find(
-      (l) => l.event === "NFTMinted"
-    ).args.tokenId;
-    aliceNFTTokenStakedForFraction = transaction3.events.find(
-      (l) => l.event === "NFTMinted"
-    ).args.tokenId;
-    bobNFTTokenStakedForFraction = transaction4.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
@@ -89,10 +90,11 @@ describe("Liquid tokens Vault tests setup", function () {
 
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
+    //ADDED
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
     // Stake token1 and token 2 for reward staking.
@@ -161,11 +163,13 @@ describe("Liquid tokens Vault tests", function () {
   let depositedFractionsInVault;
   beforeEach(async function () {
     // Collecting contracts
-    Vault = await ethers.getContractFactory("Vault");
+    const Vault = await ethers.getContractFactory("Vault");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
-
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
 
@@ -178,10 +182,16 @@ describe("Liquid tokens Vault tests", function () {
       "SFT",
       vault.address
     );
+    pricingMechanism = await PricingMechanism.deploy();
 
     //Setting relevant variables.
-    const tx = await vault.setRewardToken(rewardToken.address);
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
+    const tx = await (await vault.setRewardToken(rewardToken.address)).wait();
+    const tx2 = await (
+      await vault.setLiquidNFTToken(liquidNFTToken.address)
+    ).wait();
+    const tx3 = await (
+      await vault.setPricingMechanism(pricingMechanism.address)
+    ).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -193,12 +203,6 @@ describe("Liquid tokens Vault tests", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
     bobNFTTokenStakedForReward = transaction2.events.find(
-      (l) => l.event === "NFTMinted"
-    ).args.tokenId;
-    aliceNFTTokenStakedForFraction = transaction3.events.find(
-      (l) => l.event === "NFTMinted"
-    ).args.tokenId;
-    bobNFTTokenStakedForFraction = transaction4.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
@@ -214,10 +218,11 @@ describe("Liquid tokens Vault tests", function () {
 
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
+    //ADDED
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
     // Stake token1 and token 2 for reward staking.

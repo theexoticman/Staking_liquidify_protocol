@@ -19,10 +19,7 @@ describe("Reward Tests setup", function () {
   let bob;
 
   let aliceNFTTokenStakedForReward;
-  let aliceNFTTokenStakedForFraction;
   let bobNFTTokenStakedForReward;
-  let bobNFTTokenStakedForFraction;
-  let depositedFractionsInVault;
   /**
    * The following test is used as a beforeEach in the next application testing scenario
    */
@@ -38,6 +35,9 @@ describe("Reward Tests setup", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
@@ -49,19 +49,14 @@ describe("Reward Tests setup", function () {
       "SFT",
       vault.address
     );
+    pricingMechanism = await PricingMechanism.deploy();
+
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
-
-    // testing the setRewardTokena and setLiquidNFTTokens
-    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
-    expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
-    expect(
-      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -82,15 +77,11 @@ describe("Reward Tests setup", function () {
 
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
-
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
@@ -144,6 +135,9 @@ describe("Reward Tests", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
@@ -155,19 +149,14 @@ describe("Reward Tests", function () {
       "SFT",
       vault.address
     );
+    pricingMechanism = await PricingMechanism.deploy();
+
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
-
-    // testing the setRewardTokena and setLiquidNFTTokens
-    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
-    expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
-    expect(
-      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -188,15 +177,11 @@ describe("Reward Tests", function () {
 
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
-
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
