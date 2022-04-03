@@ -12,11 +12,11 @@ describe("Princing Mechanism Tests setup", function () {
   // contracts
   let nft;
   let pricingMechanism;
-  
+
   // wallets
   let owner;
   let alice;
-  
+
   // nfts
   let aliceNFTTokenStakedForReward;
 

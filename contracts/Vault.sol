@@ -7,6 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./SimpleNFT.sol";
 import "../interfaces/IRewardToken.sol";
 import "../interfaces/ILiquidNFTToken.sol";
+import "../interfaces/ILiquifyStaking.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "hardhat/console.sol";
@@ -19,25 +20,18 @@ import "hardhat/console.sol";
  */
 contract Vault is IVault, Ownable {
     using SafeMath for uint256;
-    //using SafeERC20 for IERC20;
 
     /**
      *
      * Generic state variables
      *
      */
-    uint256 public constant _LOCKTIME = 5 days;
-
+    ILiquifyStaking public liquify;
     address public immutable allowedNFT;
 
     IRewardToken public rewardToken;
-    ILiquidNFTToken public liquidNFTToken;
+
     INFTPricingMechanism public pricingMechanism;
-    /**
-     *
-     * NFT for reward staking
-     *
-     */
 
     struct NFTForRewardMetadata {
         address owner;
@@ -51,25 +45,6 @@ contract Vault is IVault, Ownable {
     // NFT staking for reward
     mapping(uint256 => NFTForRewardMetadata) public registeredNFTForReward;
 
-    /**
-     *
-     * NFT for liquid staking
-     *
-     */
-
-    struct NFTForLiquidMetadata {
-        address owner;
-        uint256 value;
-        uint256 stakeTime;
-        bool isRedeemed;
-        bool isStaked;
-    }
-
-    // NFT staking for liquid tokens.
-    mapping(uint256 => NFTForLiquidMetadata)
-        public registeredNFTForLiquidNFTToken;
-
-
     constructor(address _allowedNFT) {
         require(
             address(_allowedNFT) != address(0),
@@ -79,10 +54,18 @@ contract Vault is IVault, Ownable {
     }
 
     /**
-     *
-     * Core Functions
-     *
+     * @notice set the vault staking for reward smart contract address
+     * @dev dependency on pricing mechanism smart contract. deploy it and set its address here.
+     * @param _liquify the pricing mechanism address
      */
+    function setLiquify(address _liquify) external onlyOwner {
+        require(
+            address(liquify) == address(0),
+            "liquify staking already set"
+        );
+        liquify = ILiquifyStaking(_liquify);
+    }
+
     /**
      * @notice set the reward token ERC20 token smart contract address
      * @dev dependency on rewardtoken smart contract. deploy it and set its address here.
@@ -104,20 +87,6 @@ contract Vault is IVault, Ownable {
             "pricing mechanism already set"
         );
         pricingMechanism = INFTPricingMechanism(_pricingMechanism);
-    }
-
-    /**
-     * @notice set the liquid ERC20 token smart contract address
-     * @dev dependency on _liquidNFTToken smart contract. deploy it and set its address here.
-     * @param _liquidNFTToken The number of rings from dendrochronological sample
-     
-     */
-    function setLiquidNFTToken(address _liquidNFTToken) external onlyOwner {
-        require(
-            address(liquidNFTToken) == address(0),
-            "LiquidNFTToken token already set"
-        );
-        liquidNFTToken = ILiquidNFTToken(_liquidNFTToken);
     }
 
     /**
@@ -154,9 +123,12 @@ contract Vault is IVault, Ownable {
      * @param _tokenId allowedNFT tokenId to be unstaked.
      */
     function stakeForRewardToken(uint256 _tokenId) public override {
-        require(address(pricingMechanism) != address(0), "Pricing mechanism not set");
         require(
-            registeredNFTForLiquidNFTToken[_tokenId].isStaked == false,
+            address(pricingMechanism) != address(0),
+            "Pricing mechanism not set"
+        );
+        require(
+            !liquify.isStaked(_tokenId),
             "Already staked for liquid."
         );
         require(_isAuthorized(_tokenId, msg.sender), "Unauthorized user");
@@ -237,44 +209,7 @@ contract Vault is IVault, Ownable {
         emit RewardTokensMinted(_account, _amount);
     }
 
-    /**
-     *
-     * NFT Staking for liquid related functions
-     *
-     */
-
-    /**
-     * @notice Stake NFT and get liquid NFt tokens. Cannot be staked to obtain the reward token.
-     * @dev NFT value must be calculated with "calculateNFTValue' prior being staked. when user exchanges NFT for liquid tokens, they are stored here registeredNFTForLiquidNFTToken.
-     * @param _tokenId allowedNFT tokenId to be staked.
-     */
-    function stakeForLiquidNFT(uint256 _tokenId) public  {
-        require(address(pricingMechanism) != address(0), "Pricing mechanism not set");
-        require(
-            !registeredNFTForReward[_tokenId].isStaked,
-            "Already staked for rewards."
-        );
-        require(_isAuthorized(_tokenId, msg.sender), "Unauthorized user");
-        require(
-            _isAuthorized(_tokenId, address(this)),
-            "Vault requeries authorization"
-        );
-
-        address owner = IERC721(allowedNFT).ownerOf(_tokenId);
-
-        registeredNFTForLiquidNFTToken[_tokenId].owner = owner;
-        registeredNFTForLiquidNFTToken[_tokenId].value = pricingMechanism
-            .getNFTValue(_tokenId);
-        registeredNFTForLiquidNFTToken[_tokenId].isStaked = true;
-        registeredNFTForLiquidNFTToken[_tokenId].stakeTime = block.timestamp;
-        registeredNFTForLiquidNFTToken[_tokenId].isRedeemed = false;
-
-        IERC721(allowedNFT).transferFrom(owner, address(this), _tokenId);
-
-        emit NFTRegisteredForLiquid(owner, _tokenId);
-    }
-
-
+ 
     /**
      * @notice Calculate the reward for staked NFT.
      * @dev calculates the reward based on time (block.timestamp)
@@ -313,66 +248,12 @@ contract Vault is IVault, Ownable {
         registeredNFTForReward[_tokenId].reward += reward;
     }
 
-    /**
-     * @notice Redeems liquid tokens after staking a NFT and waiting after the locking period.
-     * @dev liquidNFTToken address must have been set via setLiquidNFTToken
-     * @param _tokenId the token id of the staked NFT.
-     */
-    function redeemLiquidTokens(uint256 _tokenId) public  {
-        require(
-            address(liquidNFTToken) != address(0),
-            "LiquidNFTToken contract not initialized"
-        );
-        require(msg.sender == tx.origin, "Expecting a EOA");
-        require(
-            registeredNFTForLiquidNFTToken[_tokenId].stakeTime + _LOCKTIME <=
-                block.timestamp,
-            "Lock period of 5 days"
-        );
-        require(
-            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
-            "Token not staked"
-        );
-        require(
-            registeredNFTForLiquidNFTToken[_tokenId].owner == msg.sender,
-            "Only owner can redeem"
-        );
-        require(
-            !registeredNFTForLiquidNFTToken[_tokenId].isRedeemed,
-            "Already redeemed"
-        );
-
-        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
-        registeredNFTForLiquidNFTToken[_tokenId].isRedeemed = true;
-        liquidNFTToken.mint(msg.sender, value);
-
-        emit LiquidNFTTokenRedeemed(msg.sender, value);
+    function isStaked(uint256 tokenId)
+        external
+        view
+        override
+        returns (bool)
+    {
+        return registeredNFTForReward[tokenId].isStaked;
     }
-
-       /**
-     * @notice allow user to acquire an NFT that is staked. Only NFT that have been exchanged for liquid tokens can be bought this way
-     * @dev tokens are burnt after acquisition and not transfered to previous NFT owner as one may think.
-     * @param _tokenId token to be acquired
-     */
-    function acquireNFTwithLiquidToken(uint256 _tokenId) public  {
-        require(
-            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
-            "Token is not staked."
-        );
-        require(
-            ILiquidNFTToken(liquidNFTToken).balanceOf(msg.sender) >=
-                registeredNFTForLiquidNFTToken[_tokenId].value,
-            "Not enough funds."
-        );
-        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
-        address owner = registeredNFTForReward[_tokenId].owner;
-        // Burn the token
-        liquidNFTToken.burn(msg.sender, value);
-        delete registeredNFTForReward[_tokenId];
-
-        IERC721(allowedNFT).transferFrom(address(this), msg.sender, _tokenId);
-
-        emit NFTUnregisteredForLiquidToken(owner, _tokenId);
-    }
-
 }

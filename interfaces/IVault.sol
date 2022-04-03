@@ -4,9 +4,7 @@ pragma solidity ^0.8.0;
 interface IVault {
     event RewardTokensMinted(address account, uint256 amount);
     event NFTRegistered(address indexed owner, uint256 tokenId);
-    event NFTRegisteredForLiquid(address indexed owner, uint256 tokenId);
     event NFTUnregistered(address indexed owner, uint256 tokenId);
-    event LiquidNFTTokenRedeemed(address account, uint256 amount);
 
     //Liquid Token Events
 
@@ -23,4 +21,6 @@ interface IVault {
     function updateNFTVaultReward(uint256 tokenId) external;
 
     function unstakeForRewardToken(uint256 tokenId) external;
+
+    function isStaked(uint256 tokenId) external view returns (bool);
 }

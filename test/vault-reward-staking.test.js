@@ -12,6 +12,8 @@ describe("Reward Tests setup", function () {
 
   let nft;
   let vault;
+  let liquifyStaking;
+
   let rewardToken;
   let liquidNFTToken;
   let owner;
@@ -32,6 +34,7 @@ describe("Reward Tests setup", function () {
      *
      */
     const Vault = await ethers.getContractFactory("Vault");
+    const LiquifyStaking = await ethers.getContractFactory("LiquifyStaking");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
@@ -42,26 +45,24 @@ describe("Reward Tests setup", function () {
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    liquifyStaking = await LiquifyStaking.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy(
       "RewardToken",
       "RT",
       vault.address,
-      vault.address
-    ); // liquidVault not used in this tests scenarios.
+      liquifyStaking.address
+    );
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
-      vault.address
+      liquifyStaking.address
     );
     pricingMechanism = await PricingMechanism.deploy();
 
-    const tx = await vault.setRewardToken(rewardToken.address);
-    await tx.wait();
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-    await tx2.wait();
-    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
-    await tx3.wait();
+    await (await vault.setRewardToken(rewardToken.address)).wait();
+    await (await vault.setPricingMechanism(pricingMechanism.address)).wait();
+    await (await vault.setLiquify(liquifyStaking.address)).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -137,6 +138,7 @@ describe("Reward Tests", function () {
   let bobNFTTokenStakedForReward;
   beforeEach(async function () {
     const Vault = await ethers.getContractFactory("Vault");
+    const LiquifyStaking = await ethers.getContractFactory("LiquifyStaking");
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
@@ -147,26 +149,24 @@ describe("Reward Tests", function () {
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    liquifyStaking = await LiquifyStaking.deploy(nft.address);
 
     rewardToken = await RewardToken.deploy(
       "RewardToken",
       "RT",
       vault.address,
-      vault.address
-    );// liquidVault not used in this tests scenarios.
+      liquifyStaking.address
+    );
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
-      vault.address
+      liquifyStaking.address
     );
     pricingMechanism = await PricingMechanism.deploy();
 
-    const tx = await vault.setRewardToken(rewardToken.address);
-    await tx.wait();
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-    await tx2.wait();
-    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
-    await tx3.wait();
+    await (await vault.setRewardToken(rewardToken.address)).wait();
+    await (await vault.setPricingMechanism(pricingMechanism.address)).wait();
+    await (await vault.setLiquify(liquifyStaking.address)).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();

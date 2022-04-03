@@ -12,6 +12,7 @@ describe("Setup of NFT Liquid tokens", function () {
 
   let nft;
   let vault;
+  let liquifyStaking;
   let rewardToken;
   let liquidNFTToken;
   let owner;
@@ -35,6 +36,8 @@ describe("Setup of NFT Liquid tokens", function () {
      * Stake 2 NFT in the Fraction vault
      */
     const Vault = await ethers.getContractFactory("Vault");
+    const LiquifyStaking = await ethers.getContractFactory("LiquifyStaking");
+
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
@@ -45,26 +48,38 @@ describe("Setup of NFT Liquid tokens", function () {
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    liquifyStaking = await LiquifyStaking.deploy(nft.address);
     pricingMechanism = await PricingMechanism.deploy();
-
     rewardToken = await RewardToken.deploy(
       "RewardToken",
       "RT",
       vault.address,
-      vault.address
+      liquifyStaking.address
     );
     // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
-      vault.address
+      liquifyStaking.address
     );
-    const tx = await vault.setRewardToken(rewardToken.address);
-    await tx.wait();
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-    await tx2.wait();
-    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
-    await tx3.wait();
+
+    await vault.setRewardToken(rewardToken.address);
+    await vault.setPricingMechanism(pricingMechanism.address);
+    await vault.setLiquify(liquifyStaking.address);
+
+    await liquifyStaking.setLiquidNFTToken(liquidNFTToken.address);
+    await liquifyStaking.setPricingMechanism(pricingMechanism.address);
+    await liquifyStaking.setVault(vault.address);
+
+    expect(
+      liquifyStaking.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      liquifyStaking.connect(alice).setVault(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      liquifyStaking.connect(alice).setPricingMechanism(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -112,16 +127,16 @@ describe("Setup of NFT Liquid tokens", function () {
       await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForReward)
     ).wait();
 
-    // Approve vault to transfer their NFT on their behalf.
+    // Approve liquifyStaking to transfer their NFT on their behalf.
     await (
       await nft
         .connect(alice)
-        .approve(vault.address, aliceNFTTokenStakedForFraction)
+        .approve(liquifyStaking.address, aliceNFTTokenStakedForFraction)
     ).wait();
     await (
       await nft
         .connect(bob)
-        .approve(vault.address, bobNFTTokenStakedForFraction)
+        .approve(liquifyStaking.address, bobNFTTokenStakedForFraction)
     ).wait();
 
     //stake tokens for reward
@@ -136,13 +151,15 @@ describe("Setup of NFT Liquid tokens", function () {
 
     // Stake others for liquid staking.
     stakeAliceFractions = await (
-      await vault
+      await liquifyStaking
         .connect(alice)
         .stakeForLiquidNFT(aliceNFTTokenStakedForFraction)
     ).wait();
 
     stakeBobFractions = await (
-      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForFraction)
+      await liquifyStaking
+        .connect(bob)
+        .stakeForLiquidNFT(bobNFTTokenStakedForFraction)
     ).wait();
   });
 });
@@ -167,6 +184,8 @@ describe("Liquid tokens of NFT", function () {
   let stakeBobFractions;
   beforeEach(async function () {
     const Vault = await ethers.getContractFactory("Vault");
+    const LiquifyStaking = await ethers.getContractFactory("LiquifyStaking");
+
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
@@ -177,26 +196,38 @@ describe("Liquid tokens of NFT", function () {
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    liquifyStaking = await LiquifyStaking.deploy(nft.address);
     pricingMechanism = await PricingMechanism.deploy();
-
     rewardToken = await RewardToken.deploy(
       "RewardToken",
       "RT",
       vault.address,
-      vault.address
+      liquifyStaking.address
     );
     // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
-      vault.address
+      liquifyStaking.address
     );
-    const tx = await vault.setRewardToken(rewardToken.address);
-    await tx.wait();
-    const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-    await tx2.wait();
-    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
-    await tx3.wait();
+
+    await vault.setRewardToken(rewardToken.address);
+    await vault.setPricingMechanism(pricingMechanism.address);
+    await vault.setLiquify(liquifyStaking.address);
+
+    await liquifyStaking.setLiquidNFTToken(liquidNFTToken.address);
+    await liquifyStaking.setPricingMechanism(pricingMechanism.address);
+    await liquifyStaking.setVault(vault.address);
+
+    expect(
+      liquifyStaking.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      liquifyStaking.connect(alice).setVault(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      liquifyStaking.connect(alice).setPricingMechanism(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -244,16 +275,16 @@ describe("Liquid tokens of NFT", function () {
       await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForReward)
     ).wait();
 
-    // Approve vault to transfer their NFT on their behalf.
+    // Approve liquifyStaking to transfer their NFT on their behalf.
     await (
       await nft
         .connect(alice)
-        .approve(vault.address, aliceNFTTokenStakedForFraction)
+        .approve(liquifyStaking.address, aliceNFTTokenStakedForFraction)
     ).wait();
     await (
       await nft
         .connect(bob)
-        .approve(vault.address, bobNFTTokenStakedForFraction)
+        .approve(liquifyStaking.address, bobNFTTokenStakedForFraction)
     ).wait();
 
     //stake tokens for reward
@@ -268,13 +299,15 @@ describe("Liquid tokens of NFT", function () {
 
     // Stake others for liquid staking.
     stakeAliceFractions = await (
-      await vault
+      await liquifyStaking
         .connect(alice)
         .stakeForLiquidNFT(aliceNFTTokenStakedForFraction)
     ).wait();
 
     stakeBobFractions = await (
-      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForFraction)
+      await liquifyStaking
+        .connect(bob)
+        .stakeForLiquidNFT(bobNFTTokenStakedForFraction)
     ).wait();
   });
 
@@ -302,21 +335,25 @@ describe("Liquid tokens of NFT", function () {
     ).args;
 
     expect(await nft.ownerOf(aliceNFTTokenStakedForFraction)).to.eq(
-      vault.address
+      liquifyStaking.address
     );
     expect(await nft.ownerOf(bobNFTTokenStakedForFraction)).to.eq(
-      vault.address
+      liquifyStaking.address
     );
   });
 
   it("An NFT should not stakable in two stakes", async function () {
     //Alice try to stake again on other satke
     await expect(
-      vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
+      liquifyStaking
+        .connect(alice)
+        .stakeForLiquidNFT(aliceNFTTokenStakedForReward)
     ).to.be.revertedWith("Already staked for rewards.");
     //Smart contract owner try to stake again on other satke
     await expect(
-      vault.connect(owner).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
+      liquifyStaking
+        .connect(owner)
+        .stakeForLiquidNFT(aliceNFTTokenStakedForReward)
     ).to.be.revertedWith("Already staked for rewards.");
     //Bob try to stake again on other satke
     await expect(
@@ -326,17 +363,21 @@ describe("Liquid tokens of NFT", function () {
 
   it("One should be able to redeem their liquid tokens in exchange for their staked NFT after waiting locking period.", async function () {
     const aliceNftValue = (
-      await vault.registeredNFTForLiquidNFTToken(aliceNFTTokenStakedForFraction)
+      await liquifyStaking.registeredNFTForLiquidNFTToken(
+        aliceNFTTokenStakedForFraction
+      )
     ).value;
 
     await expect(
-      vault.connect(alice).redeemLiquidTokens(aliceNFTTokenStakedForFraction)
+      liquifyStaking
+        .connect(alice)
+        .redeemLiquidTokens(aliceNFTTokenStakedForFraction)
     ).to.be.revertedWith("Lock period of 5 days");
     //fast-forward
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
 
     const res = await (
-      await vault
+      await liquifyStaking
         .connect(alice)
         .redeemLiquidTokens(aliceNFTTokenStakedForFraction)
     ).wait();
@@ -361,22 +402,28 @@ describe("Liquid tokens of NFT", function () {
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
 
     await (
-      await vault
+      await liquifyStaking
         .connect(alice)
         .redeemLiquidTokens(aliceNFTTokenStakedForFraction)
     ).wait();
     await (
-      await vault.connect(bob).redeemLiquidTokens(bobNFTTokenStakedForFraction)
+      await liquifyStaking
+        .connect(bob)
+        .redeemLiquidTokens(bobNFTTokenStakedForFraction)
     ).wait();
 
     const aliceFractionAmount = await liquidNFTToken.balanceOf(alice.address);
     const bobFractionAmount = await liquidNFTToken.balanceOf(bob.address);
 
     const aliceNftValue = (
-      await vault.registeredNFTForLiquidNFTToken(aliceNFTTokenStakedForFraction)
+      await liquifyStaking.registeredNFTForLiquidNFTToken(
+        aliceNFTTokenStakedForFraction
+      )
     ).value;
     const bobNftValue = (
-      await vault.registeredNFTForLiquidNFTToken(bobNFTTokenStakedForFraction)
+      await liquifyStaking.registeredNFTForLiquidNFTToken(
+        bobNFTTokenStakedForFraction
+      )
     ).value;
 
     expect(aliceNftValue).to.eq(aliceFractionAmount);
@@ -385,7 +432,7 @@ describe("Liquid tokens of NFT", function () {
     if (aliceFractionAmount.gt(bobFractionAmount)) {
       //Alice should be able to buy bobs NFT
       await (
-        await vault
+        await liquifyStaking
           .connect(alice)
           .acquireNFTwithLiquidToken(bobNFTTokenStakedForFraction)
       ).wait();
@@ -399,14 +446,14 @@ describe("Liquid tokens of NFT", function () {
       );
       // if bob tries to buy alice one should revert with "Not enough funds."
       await expect(
-        vault
+        liquifyStaking
           .connect(bob)
           .acquireNFTwithLiquidToken(aliceNFTTokenStakedForFraction)
       ).to.be.revertedWith("Not enough funds.");
     } else if (aliceFractionAmount.lt(bobFractionAmount)) {
       //Bob should be able to buy alice's NFT
       await (
-        await vault
+        await liquifyStaking
           .connect(bob)
           .acquireNFTwithLiquidToken(aliceNFTTokenStakedForFraction)
       ).wait();
@@ -420,14 +467,14 @@ describe("Liquid tokens of NFT", function () {
       );
       // if alice tries to buy bob one should revert with "Not enough funds."
       await expect(
-        vault
+        liquifyStaking
           .connect(alice)
           .acquireNFTwithLiquidToken(bobNFTTokenStakedForFraction)
       ).to.be.revertedWith("Not enough funds.");
     } else if (aliceFractionAmount.eq(bobFractionAmount)) {
       //Bob should be able to buy alice's NFT
       await (
-        await vault
+        await liquifyStaking
           .connect(bob)
           .acquireNFTwithLiquidToken(aliceNFTTokenStakedForFraction)
       ).wait();
@@ -441,7 +488,7 @@ describe("Liquid tokens of NFT", function () {
       );
       // alice should be the new owner of NFT bobNFTTokenStakedForFraction
       await (
-        await vault
+        await liquifyStaking
           .connect(alice)
           .acquireNFTwithLiquidToken(bobNFTTokenStakedForFraction)
       ).wait();
