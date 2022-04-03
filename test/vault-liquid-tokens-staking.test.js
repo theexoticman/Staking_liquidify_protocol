@@ -12,6 +12,7 @@ describe("Liquid tokens Vault tests setup", function () {
 
   let nft;
   let vault;
+  let liquidVault;
   let rewardToken;
   let liquidNFTToken;
   let pricingMechanism;
@@ -19,8 +20,8 @@ describe("Liquid tokens Vault tests setup", function () {
   let alice;
   let bob;
 
-  let aliceNFTTokenStakedForReward;
-  let bobNFTTokenStakedForReward;
+  let aliceNFTTokenStakedForLiquid;
+  let bobNFTTokenStakedForLiquid;
   let depositedFractionsInVault;
   /**
    * The following test is used as a beforeEach in the next application testing scenario
@@ -42,39 +43,45 @@ describe("Liquid tokens Vault tests setup", function () {
     const PricingMechanism = await ethers.getContractFactory(
       "NFTPricingMechanism"
     );
+    const LiquidVault = await ethers.getContractFactory("LiquidVault");
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
 
     //Deploying Contractss
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
       vault.address
     );
+    liquidVault = await LiquidVault.deploy();
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      liquidVault.address
+    );
+    // liquidVault not used in this tests scenarios.);
     pricingMechanism = await PricingMechanism.deploy();
 
-    //Setting relevant variables.
-    const tx = await (await vault.setRewardToken(rewardToken.address)).wait();
-    const tx2 = await (
-      await vault.setLiquidNFTToken(liquidNFTToken.address)
-    ).wait();
-    const tx3 = await (
-      await vault.setPricingMechanism(pricingMechanism.address)
-    ).wait();
+    // setting for vault.
+    await (await vault.setRewardToken(rewardToken.address)).wait();
+    await (await vault.setLiquidNFTToken(liquidNFTToken.address)).wait();
+    await (await vault.setPricingMechanism(pricingMechanism.address)).wait();
+
+    // setting for liquid studio,
+    await (await liquidVault.setRewardToken(rewardToken.address)).wait();
+    await (await liquidVault.setLiquidNFTToken(liquidNFTToken.address)).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
     const transaction2 = await (await nft.mint(bob.address)).wait();
-    const transaction3 = await (await nft.mint(alice.address)).wait();
-    const transaction4 = await (await nft.mint(bob.address)).wait();
 
-    aliceNFTTokenStakedForReward = transaction1.events.find(
+    aliceNFTTokenStakedForLiquid = transaction1.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
-    bobNFTTokenStakedForReward = transaction2.events.find(
+    bobNFTTokenStakedForLiquid = transaction2.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
@@ -82,28 +89,28 @@ describe("Liquid tokens Vault tests setup", function () {
     await (
       await nft
         .connect(alice)
-        .approve(vault.address, aliceNFTTokenStakedForReward)
+        .approve(vault.address, aliceNFTTokenStakedForLiquid)
     ).wait();
     await (
-      await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForReward)
+      await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForLiquid)
     ).wait();
 
     // set NFT price
     await (
-      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForLiquid)
     ).wait();
     //ADDED
     await (
-      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForLiquid)
     ).wait();
 
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
-      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
+      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForLiquid)
     ).wait();
     stakeBobReward = await (
-      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForLiquid)
     ).wait();
 
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
@@ -112,35 +119,39 @@ describe("Liquid tokens Vault tests setup", function () {
     redeemRes = await (
       await vault
         .connect(alice)
-        .redeemLiquidTokens(aliceNFTTokenStakedForReward)
+        .redeemLiquidTokens(aliceNFTTokenStakedForLiquid)
     ).wait();
 
     // Test Event is called
     let val = redeemRes.events.find(
       (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args;
-    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
-    let amount = redeemRes.events.find(
+    depositedFractionsInVault = redeemRes.events.find(
       (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args.amount;
+    const depositedFractionsInVault2 = await liquidNFTToken.balanceOf(
+      alice.address
+    );
 
-    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
-
-    expect(depositedFractionsInVault).to.eq(amount);
+    expect(depositedFractionsInVault2).to.eq(depositedFractionsInVault);
 
     // Approve vault smart contract to transfer liquidNFTToken with allowance
     liquidNFTToken
       .connect(alice)
-      .approve(vault.address, depositedFractionsInVault);
+      .approve(liquidVault.address, depositedFractionsInVault2);
 
     // Stake all liquid tokens
-    await (
-      await vault
+    const deposit = await (
+      await liquidVault
         .connect(alice)
-        .depositLiquidNFTTokens(depositedFractionsInVault)
+        .depositLiquidNFTTokens(depositedFractionsInVault2)
     ).wait();
 
+    const args = deposit.events.find(
+      (l) => l.event === "LiquidNFTTokensDeposited"
+    ).args;
+    depositedFractionsInVault = depositedFractionsInVault2;
     expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(0);
   });
 });
@@ -151,12 +162,13 @@ describe("Liquid tokens Vault tests", function () {
   let nft;
   let vault;
   let liquidNFTToken;
+  let liquidVault;
   let owner;
   let alice;
   let bob;
 
-  let aliceNFTTokenStakedForReward;
-  let bobNFTTokenStakedForReward;
+  let aliceNFTTokenStakedForLiquid;
+  let bobNFTTokenStakedForLiquid;
 
   let redeemRes;
 
@@ -170,39 +182,45 @@ describe("Liquid tokens Vault tests", function () {
     const PricingMechanism = await ethers.getContractFactory(
       "NFTPricingMechanism"
     );
+    const LiquidVault = await ethers.getContractFactory("LiquidVault");
     // Collecting Signers
     [owner, alice, bob] = await ethers.getSigners();
 
     //Deploying Contractss
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
       vault.address
     );
+    liquidVault = await LiquidVault.deploy();
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      liquidVault.address
+    );
+    // liquidVault not used in this tests scenarios.);
     pricingMechanism = await PricingMechanism.deploy();
 
-    //Setting relevant variables.
-    const tx = await (await vault.setRewardToken(rewardToken.address)).wait();
-    const tx2 = await (
-      await vault.setLiquidNFTToken(liquidNFTToken.address)
-    ).wait();
-    const tx3 = await (
-      await vault.setPricingMechanism(pricingMechanism.address)
-    ).wait();
+    // setting for vault.
+    await (await vault.setRewardToken(rewardToken.address)).wait();
+    await (await vault.setLiquidNFTToken(liquidNFTToken.address)).wait();
+    await (await vault.setPricingMechanism(pricingMechanism.address)).wait();
+
+    // setting for liquid studio,
+    await (await liquidVault.setRewardToken(rewardToken.address)).wait();
+    await (await liquidVault.setLiquidNFTToken(liquidNFTToken.address)).wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
     const transaction2 = await (await nft.mint(bob.address)).wait();
-    const transaction3 = await (await nft.mint(alice.address)).wait();
-    const transaction4 = await (await nft.mint(bob.address)).wait();
 
-    aliceNFTTokenStakedForReward = transaction1.events.find(
+    aliceNFTTokenStakedForLiquid = transaction1.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
-    bobNFTTokenStakedForReward = transaction2.events.find(
+    bobNFTTokenStakedForLiquid = transaction2.events.find(
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
@@ -210,28 +228,28 @@ describe("Liquid tokens Vault tests", function () {
     await (
       await nft
         .connect(alice)
-        .approve(vault.address, aliceNFTTokenStakedForReward)
+        .approve(vault.address, aliceNFTTokenStakedForLiquid)
     ).wait();
     await (
-      await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForReward)
+      await nft.connect(bob).approve(vault.address, bobNFTTokenStakedForLiquid)
     ).wait();
 
     // set NFT price
     await (
-      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForLiquid)
     ).wait();
     //ADDED
     await (
-      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForLiquid)
     ).wait();
 
     // Stake token1 and token 2 for reward staking.
 
     stakeAliceReward = await (
-      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForReward)
+      await vault.connect(alice).stakeForLiquidNFT(aliceNFTTokenStakedForLiquid)
     ).wait();
     stakeBobReward = await (
-      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForReward)
+      await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForLiquid)
     ).wait();
 
     hre.network.provider.send("evm_increaseTime", [FIVE_DAYS + 1]);
@@ -240,63 +258,68 @@ describe("Liquid tokens Vault tests", function () {
     redeemRes = await (
       await vault
         .connect(alice)
-        .redeemLiquidTokens(aliceNFTTokenStakedForReward)
+        .redeemLiquidTokens(aliceNFTTokenStakedForLiquid)
     ).wait();
 
     // Test Event is called
     let val = redeemRes.events.find(
       (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args;
-    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
 
-    let amount = redeemRes.events.find(
+    depositedFractionsInVault = redeemRes.events.find(
       (l) => l.event === "LiquidNFTTokenRedeemed"
     ).args.amount;
+    const depositedFractionsInVault2 = await liquidNFTToken.balanceOf(
+      alice.address
+    );
 
-    depositedFractionsInVault = await liquidNFTToken.balanceOf(alice.address);
-
-    expect(depositedFractionsInVault).to.eq(amount);
+    expect(depositedFractionsInVault2).to.eq(depositedFractionsInVault);
 
     // Approve vault smart contract to transfer liquidNFTToken with allowance
     liquidNFTToken
       .connect(alice)
-      .approve(vault.address, depositedFractionsInVault);
+      .approve(liquidVault.address, depositedFractionsInVault2);
 
     // Stake all liquid tokens
-    await (
-      await vault
+    const deposit = await (
+      await liquidVault
         .connect(alice)
-        .depositLiquidNFTTokens(depositedFractionsInVault)
+        .depositLiquidNFTTokens(depositedFractionsInVault2)
     ).wait();
 
+    const args = deposit.events.find(
+      (l) => l.event === "LiquidNFTTokensDeposited"
+    ).args;
+    depositedFractionsInVault = depositedFractionsInVault2;
     expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(0);
   });
 
   it("Should be able to deposit Liquidtokens, balance is removed from owner and added to the vault", async function () {
     // getting balance after staking all
     const balance2 = await liquidNFTToken.balanceOf(alice.address);
-
     expect(balance2).to.eq(0);
-    // getting balance after staking all
-    const balance3 = await liquidNFTToken.balanceOf(vault.address);
 
+    // getting vault balance after alice staked all
+    const balance3 = await liquidNFTToken.balanceOf(liquidVault.address);
+
+    // should be equal to her deposit
     expect(balance3).to.eq(depositedFractionsInVault);
   });
 
   it("Reward token amount should be updated overtime for someone depositing Staking Liquid Tokens", async function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
-    await vault.connect(owner).updateLiquidVaultReward(alice.address);
+    await liquidVault.connect(owner).updateLiquidVaultReward(alice.address);
 
-    await vault.connect(alice).redeemRewardTokensLiquidStaking();
+    await liquidVault.connect(alice).redeemRewardTokensLiquidStaking();
 
     const balanceReward = await rewardToken.balanceOf(alice.address);
 
-    const account = await vault.stakersContributions(alice.address);
+    const account = await liquidVault.stakersContributions(alice.address);
 
     hre.network.provider.send("evm_increaseTime", [5000]);
 
-    await vault.connect(alice).redeemRewardTokensLiquidStaking();
+    await liquidVault.connect(alice).redeemRewardTokensLiquidStaking();
 
     const balance2 = await rewardToken.balanceOf(alice.address);
 
@@ -307,13 +330,13 @@ describe("Liquid tokens Vault tests", function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
     await (
-      await vault.connect(owner).updateLiquidVaultReward(alice.address)
+      await liquidVault.connect(owner).updateLiquidVaultReward(alice.address)
     ).wait();
-    let stakedAmount = (await vault.stakersContributions(alice.address))
+    let stakedAmount = (await liquidVault.stakersContributions(alice.address))
       .stakedAmount;
 
     await (
-      await vault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
+      await liquidVault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
     ).wait();
 
     expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(stakedAmount);
@@ -323,13 +346,13 @@ describe("Liquid tokens Vault tests", function () {
     hre.network.provider.send("evm_increaseTime", [100]);
 
     await (
-      await vault.connect(owner).updateLiquidVaultReward(alice.address)
+      await liquidVault.connect(owner).updateLiquidVaultReward(alice.address)
     ).wait();
-    let stakedAmount = (await vault.stakersContributions(alice.address))
+    let stakedAmount = (await liquidVault.stakersContributions(alice.address))
       .stakedAmount;
 
     await (
-      await vault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
+      await liquidVault.connect(alice).withdrawStakedLiquidTokens(stakedAmount)
     ).wait();
 
     expect(await liquidNFTToken.balanceOf(alice.address)).to.eq(stakedAmount);
@@ -337,9 +360,9 @@ describe("Liquid tokens Vault tests", function () {
     const nftAcquisiton = await (
       await vault
         .connect(alice)
-        .acquireNFTwithLiquidToken(aliceNFTTokenStakedForReward)
+        .acquireNFTwithLiquidToken(aliceNFTTokenStakedForLiquid)
     ).wait();
-    const acquiredNftOwner = await nft.ownerOf(aliceNFTTokenStakedForReward);
+    const acquiredNftOwner = await nft.ownerOf(aliceNFTTokenStakedForLiquid);
 
     // expect Alice is the new owner
     expect(acquiredNftOwner).to.eq(alice.address);

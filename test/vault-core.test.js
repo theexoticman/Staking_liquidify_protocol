@@ -45,7 +45,12 @@ describe("Vault core tests setup", function () {
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      vault.address
+    ); // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
@@ -177,7 +182,12 @@ describe("Vault core tests", function () {
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
 
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      vault.address
+    ); // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",

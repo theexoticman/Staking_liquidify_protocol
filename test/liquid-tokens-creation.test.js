@@ -47,7 +47,13 @@ describe("Setup of NFT Liquid tokens", function () {
     vault = await Vault.deploy(nft.address);
     pricingMechanism = await PricingMechanism.deploy();
 
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      vault.address
+    );
+    // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",
@@ -173,7 +179,13 @@ describe("Liquid tokens of NFT", function () {
     vault = await Vault.deploy(nft.address);
     pricingMechanism = await PricingMechanism.deploy();
 
-    rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
+    rewardToken = await RewardToken.deploy(
+      "RewardToken",
+      "RT",
+      vault.address,
+      vault.address
+    );
+    // liquidVault not used in this tests scenarios.
     liquidNFTToken = await LiquidNFTToken.deploy(
       "LiquidNFTToken",
       "SFT",

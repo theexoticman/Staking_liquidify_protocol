@@ -69,24 +69,6 @@ contract Vault is IVault, Ownable {
     mapping(uint256 => NFTForLiquidMetadata)
         public registeredNFTForLiquidNFTToken;
 
-    /**
-     *
-     * Liquid Vault Part
-     *
-     */
-    struct LiquidStakingUserInfo {
-        uint256 stakedAmount;
-        uint256 stakeEpoch;
-        uint256 reward;
-    }
-    // List of liquid stackers
-    address[] private liquidStakers;
-
-    // liquid staking depositors status
-    mapping(address => bool) private existingStakers;
-
-    // LiquidNFTToken s and asscociated amount
-    mapping(address => LiquidStakingUserInfo) public stakersContributions;
 
     constructor(address _allowedNFT) {
         require(
@@ -266,7 +248,7 @@ contract Vault is IVault, Ownable {
      * @dev NFT value must be calculated with "calculateNFTValue' prior being staked. when user exchanges NFT for liquid tokens, they are stored here registeredNFTForLiquidNFTToken.
      * @param _tokenId allowedNFT tokenId to be staked.
      */
-    function stakeForLiquidNFT(uint256 _tokenId) public override {
+    function stakeForLiquidNFT(uint256 _tokenId) public  {
         require(address(pricingMechanism) != address(0), "Pricing mechanism not set");
         require(
             !registeredNFTForReward[_tokenId].isStaked,
@@ -292,31 +274,6 @@ contract Vault is IVault, Ownable {
         emit NFTRegisteredForLiquid(owner, _tokenId);
     }
 
-    /**
-     * @notice allow user to acquire an NFT that is staked. Only NFT that have been exchanged for liquid tokens can be bought this way
-     * @dev tokens are burnt after acquisition and not transfered to previous NFT owner as one may think.
-     * @param _tokenId token to be acquired
-     */
-    function acquireNFTwithLiquidToken(uint256 _tokenId) public override {
-        require(
-            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
-            "Token is not staked."
-        );
-        require(
-            ILiquidNFTToken(liquidNFTToken).balanceOf(msg.sender) >=
-                registeredNFTForLiquidNFTToken[_tokenId].value,
-            "Not enough funds."
-        );
-        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
-        address owner = registeredNFTForReward[_tokenId].owner;
-        // Burn the token
-        liquidNFTToken.burn(msg.sender, value);
-        delete registeredNFTForReward[_tokenId];
-
-        IERC721(allowedNFT).transferFrom(address(this), msg.sender, _tokenId);
-
-        emit NFTUnregisteredForLiquidToken(owner, _tokenId);
-    }
 
     /**
      * @notice Calculate the reward for staked NFT.
@@ -361,7 +318,7 @@ contract Vault is IVault, Ownable {
      * @dev liquidNFTToken address must have been set via setLiquidNFTToken
      * @param _tokenId the token id of the staked NFT.
      */
-    function redeemLiquidTokens(uint256 _tokenId) public override {
+    function redeemLiquidTokens(uint256 _tokenId) public  {
         require(
             address(liquidNFTToken) != address(0),
             "LiquidNFTToken contract not initialized"
@@ -392,105 +349,30 @@ contract Vault is IVault, Ownable {
         emit LiquidNFTTokenRedeemed(msg.sender, value);
     }
 
-    /**
-     *
-     * Liquid Vault
-     *
+       /**
+     * @notice allow user to acquire an NFT that is staked. Only NFT that have been exchanged for liquid tokens can be bought this way
+     * @dev tokens are burnt after acquisition and not transfered to previous NFT owner as one may think.
+     * @param _tokenId token to be acquired
      */
-
-    /**
-     * @notice Deposits liquid tokens to the staking vault.
-     * @dev before depositing. user must have approved this smart contract to transferFrom their account.
-     * @param _amount amount of tokens to be staked
-     */
-    function depositLiquidNFTTokens(uint256 _amount) public override {
-        require(_amount > 0, "deposit more than 0 liquid tokens");
-        ILiquidNFTToken(liquidNFTToken).transferFrom(
-            msg.sender,
-            address(this),
-            _amount
-        );
-        if (!existingStakers[msg.sender]) {
-            existingStakers[msg.sender] = true;
-            liquidStakers.push(msg.sender);
-        }
-        stakersContributions[msg.sender].stakedAmount = _amount;
-        stakersContributions[msg.sender].stakeEpoch = block.timestamp;
-        emit LiquidNFTTokensDeposited(msg.sender, _amount);
-    }
-
-    /**
-     * @notice Withdraws staked liquid tokens from the staking vault
-     * @param _amount the amount of takens to the withdraw from the staking pool.
-     */
-    function withdrawStakedLiquidTokens(uint256 _amount) public override {
-        require(_amount > 0, "withraw more than 0");
+    function acquireNFTwithLiquidToken(uint256 _tokenId) public  {
         require(
-            stakersContributions[msg.sender].stakedAmount >= _amount,
+            registeredNFTForLiquidNFTToken[_tokenId].isStaked,
+            "Token is not staked."
+        );
+        require(
+            ILiquidNFTToken(liquidNFTToken).balanceOf(msg.sender) >=
+                registeredNFTForLiquidNFTToken[_tokenId].value,
             "Not enough funds."
         );
-        stakersContributions[msg.sender].stakedAmount -= _amount;
-        ILiquidNFTToken(liquidNFTToken).transfer(msg.sender, _amount);
-        emit StakedLiquidTokensWithdrew(msg.sender, _amount);
+        uint256 value = registeredNFTForLiquidNFTToken[_tokenId].value;
+        address owner = registeredNFTForReward[_tokenId].owner;
+        // Burn the token
+        liquidNFTToken.burn(msg.sender, value);
+        delete registeredNFTForReward[_tokenId];
+
+        IERC721(allowedNFT).transferFrom(address(this), msg.sender, _tokenId);
+
+        emit NFTUnregisteredForLiquidToken(owner, _tokenId);
     }
 
-    /**
-     * @notice Redeems Reward Tokens for the staked liquid tokens to msg sender.
-     */
-    function redeemRewardTokensLiquidStaking() public override {
-        require(
-            stakersContributions[msg.sender].reward >= 0,
-            "No reward available"
-        );
-        uint256 reward = stakersContributions[msg.sender].reward;
-
-        delete stakersContributions[msg.sender].reward;
-
-        _mintRewards(msg.sender, reward);
-        emit RewardTokensClaimed(msg.sender, reward);
-    }
-
-    /**
-     * @notice Updates _account reward for staked liquid
-     * @dev calculated based on time (block.timestamp)
-     * @param _account account for which we should update the reward
-     */
-    function updateLiquidVaultReward(address _account)
-        public
-        override
-        onlyOwner
-    {
-        require(existingStakers[_account], "User does not stake.");
-
-        // calculate new reward for the period of time since rewardCalculationEpoch
-        uint256 reward = stakersContributions[_account].reward.add(
-            _calculateLiquidStakingReward(
-                stakersContributions[_account].stakedAmount,
-                stakersContributions[_account].stakeEpoch
-            )
-        );
-        // update time to now
-        stakersContributions[_account].stakeEpoch = block.timestamp;
-        // update the reward of the nft
-        stakersContributions[_account].reward += reward;
-        emit LiquidVaultRewardUpdated(_account, reward);
-    }
-
-    /**
-     * @notice Calculates the Reward associated with an NFT giving its value and time since the last calculation.
-     * This internal function is called by updateLiquidVaultReward to calculate the reward for a specific NFT.
-     * @dev reward is based on evolution of time.
-     * @param _amount amount of staked tokens
-     * @param _previousEpoch last time rewards were calculated
-     * @return reward, reward in tokens.
-     */
-    function _calculateLiquidStakingReward(
-        uint256 _amount,
-        uint256 _previousEpoch
-    ) internal view returns (uint256) {
-        uint256 currentTime = block.timestamp;
-        uint256 delta_staked = currentTime.sub(_previousEpoch);
-        uint256 reward = _amount.mul(delta_staked);
-        return reward;
-    }
 }

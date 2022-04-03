@@ -12,12 +12,27 @@ describe("Reward Token tests", function () {
     RewardToken = await ethers.getContractFactory("RewardToken");
   });
 
-  it("Prevent RewardToken Minter to be zero account", async function () {
+  it("Prevent one of the RewardToken  Minters to be zero account", async function () {
     await expect(
       RewardToken.deploy(
         "RewardToken",
         "RT",
-        "0x0000000000000000000000000000000000000000"
+        "0x0000000000000000000000000000000000000000","0x0000000000000000000000000000000000000001"
+      )
+    ).to.be.revertedWith("mint zero address");
+
+    await expect(
+      RewardToken.deploy(
+        "RewardToken",
+        "RT",
+        "0x0000000000000000000000000000000000000001","0x0000000000000000000000000000000000000000"
+      )
+    ).to.be.revertedWith("mint zero address");
+    await expect(
+      RewardToken.deploy(
+        "RewardToken",
+        "RT",
+        "0x0000000000000000000000000000000000000000","0x0000000000000000000000000000000000000000"
       )
     ).to.be.revertedWith("mint zero address");
   });
