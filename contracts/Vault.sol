@@ -1,6 +1,7 @@
 //SPDX-License-Identifier: Unlicense
 pragma solidity ^0.8.0;
 import "../interfaces/IVault.sol";
+import "../interfaces/INFTPricingMechanism.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "./SimpleNFT.sol";
@@ -25,16 +26,13 @@ contract Vault is IVault, Ownable {
      * Generic state variables
      *
      */
-    uint8 public constant _RANDOMMODULO = 50;
     uint256 public constant _LOCKTIME = 5 days;
 
     address public immutable allowedNFT;
 
     IRewardToken public rewardToken;
     ILiquidNFTToken public liquidNFTToken;
-    // value associated to an NFT
-    mapping(uint256 => uint256) public nftValue;
-
+    INFTPricingMechanism public pricingMechanism;
     /**
      *
      * NFT for reward staking
@@ -114,6 +112,19 @@ contract Vault is IVault, Ownable {
     }
 
     /**
+     * @notice set the pricing mechanism smart contract address
+     * @dev dependency on pricing mechanism smart contract. deploy it and set its address here.
+     * @param _pricingMechanism the pricing mechanism address
+     */
+    function setPricingMechanism(address _pricingMechanism) external onlyOwner {
+        require(
+            address(pricingMechanism) == address(0),
+            "pricing mechanism already set"
+        );
+        pricingMechanism = INFTPricingMechanism(_pricingMechanism);
+    }
+
+    /**
      * @notice set the liquid ERC20 token smart contract address
      * @dev dependency on _liquidNFTToken smart contract. deploy it and set its address here.
      * @param _liquidNFTToken The number of rings from dendrochronological sample
@@ -156,46 +167,12 @@ contract Vault is IVault, Ownable {
     }
 
     /**
-     * @notice Calculates NFT value. for now, random value is attributed
-     * @dev for now uses a pseudo random algorithm based on nft value
-     * @param _tokenId to be used as a pseudo random value.
-     
-     */
-    function calculateNFTValue(uint256 _tokenId) public {
-        nftValue[_tokenId] = unsafeNFTRandomValue(_tokenId);
-    }
-
-    /**
-     * @notice Calculate of random number.
-     * @dev Unsafe random calculation. for random numbers migrate to Chainlink VRF.
-     * @param _pseudoRandomNumber a pseudo random number that the miner does not control.
-     * @return _pseudoRandomNumber a pseudo random number.
-     */
-    function unsafeNFTRandomValue(uint256 _pseudoRandomNumber)
-        public
-        view
-        returns (uint256)
-    {
-        uint256 random = uint256(
-            keccak256(
-                abi.encodePacked(
-                    block.difficulty,
-                    block.timestamp,
-                    _pseudoRandomNumber
-                )
-            )
-        );
-        uint256 randomValue = uint256((random % _RANDOMMODULO) + 1); // between 1 and 50
-        return randomValue;
-    }
-
-    /**
      * @notice allow a user to stake their NFTs in the vault. After staking they can be rewarded in reward tokens.
      * @dev NFT value must be calculated with "calculateNFTValue' prior being staked.
      * @param _tokenId allowedNFT tokenId to be unstaked.
      */
     function stakeForRewardToken(uint256 _tokenId) public override {
-        require(nftValue[_tokenId] > 0, "set NFT value prior to staking.");
+        require(address(pricingMechanism) != address(0), "Pricing mechanism not set");
         require(
             registeredNFTForLiquidNFTToken[_tokenId].isStaked == false,
             "Already staked for liquid."
@@ -208,7 +185,9 @@ contract Vault is IVault, Ownable {
         address owner = IERC721(allowedNFT).ownerOf(_tokenId);
 
         registeredNFTForReward[_tokenId].owner = owner;
-        registeredNFTForReward[_tokenId].value = nftValue[_tokenId];
+        registeredNFTForReward[_tokenId].value = pricingMechanism.getNFTValue(
+            _tokenId
+        );
         registeredNFTForReward[_tokenId].stakeTime = block.timestamp;
         registeredNFTForReward[_tokenId].rewardCalculationEpoch = block
             .timestamp;
@@ -288,7 +267,7 @@ contract Vault is IVault, Ownable {
      * @param _tokenId allowedNFT tokenId to be staked.
      */
     function stakeForLiquidNFT(uint256 _tokenId) public override {
-        require(nftValue[_tokenId] > 0, "set NFT value prior to staking.");
+        require(address(pricingMechanism) != address(0), "Pricing mechanism not set");
         require(
             !registeredNFTForReward[_tokenId].isStaked,
             "Already staked for rewards."
@@ -302,7 +281,8 @@ contract Vault is IVault, Ownable {
         address owner = IERC721(allowedNFT).ownerOf(_tokenId);
 
         registeredNFTForLiquidNFTToken[_tokenId].owner = owner;
-        registeredNFTForLiquidNFTToken[_tokenId].value = nftValue[_tokenId];
+        registeredNFTForLiquidNFTToken[_tokenId].value = pricingMechanism
+            .getNFTValue(_tokenId);
         registeredNFTForLiquidNFTToken[_tokenId].isStaked = true;
         registeredNFTForLiquidNFTToken[_tokenId].stakeTime = block.timestamp;
         registeredNFTForLiquidNFTToken[_tokenId].isRedeemed = false;
@@ -386,6 +366,7 @@ contract Vault is IVault, Ownable {
             address(liquidNFTToken) != address(0),
             "LiquidNFTToken contract not initialized"
         );
+        require(msg.sender == tx.origin, "Expecting a EOA");
         require(
             registeredNFTForLiquidNFTToken[_tokenId].stakeTime + _LOCKTIME <=
                 block.timestamp,

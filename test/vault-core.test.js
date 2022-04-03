@@ -14,6 +14,7 @@ describe("Vault core tests setup", function () {
   let vault;
   let rewardToken;
   let liquidNFTToken;
+  let pricingMechanism;
   let owner;
   let alice;
   let bob;
@@ -38,6 +39,7 @@ describe("Vault core tests setup", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
@@ -49,18 +51,33 @@ describe("Vault core tests setup", function () {
       "SFT",
       vault.address
     );
+
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
+    pricingMechanism = await PricingMechanism.deploy();
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
+
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
 
-    // testing the setRewardTokena and setLiquidNFTTokens
+    // testing the setRewardTokena, setLiquidNFTTokens and setPricingMechanism
     expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
+    expect(await vault.pricingMechanism()).to.eq(pricingMechanism.address);
+
+    // testing the setRewardToken, setLiquidNFTTokens set setPricingMechanism ownerOnly caller
     expect(
       vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      vault.connect(alice).setRewardToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      vault.connect(alice).setPricingMechanism(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -74,23 +91,26 @@ describe("Vault core tests setup", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
-    // testing simpleNFT min function
+    // testing simpleNFT mint function
     expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
       alice.address
     );
     expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(bob.address);
 
-    // set NFT price
+    // set NFT price in NFTPricingMechanism
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
+    expect(
+      await pricingMechanism.getNFTValue(aliceNFTTokenStakedForReward)
+    ).to.be.above(0);
+    expect(
+      await pricingMechanism.getNFTValue(bobNFTTokenStakedForReward)
+    ).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
@@ -139,6 +159,7 @@ describe("Vault core tests", function () {
   let vault;
   let rewardToken;
   let liquidNFTToken;
+  let pricingMechanism;
   let owner;
   let alice;
   let bob;
@@ -150,6 +171,7 @@ describe("Vault core tests", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
@@ -161,18 +183,33 @@ describe("Vault core tests", function () {
       "SFT",
       vault.address
     );
+
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
+    pricingMechanism = await PricingMechanism.deploy();
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
+
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
 
-    // testing the setRewardTokena and setLiquidNFTTokens
+    // testing the setRewardTokena, setLiquidNFTTokens and setPricingMechanism
     expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
     expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
+    expect(await vault.pricingMechanism()).to.eq(pricingMechanism.address);
+
+    // testing the setRewardToken, setLiquidNFTTokens set setPricingMechanism ownerOnly caller
     expect(
       vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      vault.connect(alice).setRewardToken(liquidNFTToken.address)
+    ).to.be.revertedWith("Ownable: caller is not the owner");
+    expect(
+      vault.connect(alice).setPricingMechanism(liquidNFTToken.address)
     ).to.be.revertedWith("Ownable: caller is not the owner");
 
     // minting NFTs
@@ -186,23 +223,26 @@ describe("Vault core tests", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
-    // testing simpleNFT min function
+    // testing simpleNFT mint function
     expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
       alice.address
     );
     expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(bob.address);
 
-    // set NFT price
+    // set NFT price in NFTPricingMechanism
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
+    expect(
+      await pricingMechanism.getNFTValue(aliceNFTTokenStakedForReward)
+    ).to.be.above(0);
+    expect(
+      await pricingMechanism.getNFTValue(bobNFTTokenStakedForReward)
+    ).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
@@ -314,15 +354,6 @@ describe("Vault core tests", function () {
     await expect(
       rewardToken.connect(owner).mint(owner.address, scale(100))
     ).to.be.revertedWith("Only minter can mint reward tokens");
-  });
-
-  it("NFT random Value should be in [1,50]", async function () {
-    let value;
-    for (let i = 0; i < 1000; i++) {
-      value = await vault.unsafeNFTRandomValue(i);
-      expect(value).to.be.below(51);
-      expect(value).to.be.above(0);
-    }
   });
 
   it("When unstaking NFT should update rewards in RegistrationMetadata ", async function () {

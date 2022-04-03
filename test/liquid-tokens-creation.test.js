@@ -38,10 +38,14 @@ describe("Setup of NFT Liquid tokens", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    pricingMechanism = await PricingMechanism.deploy();
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
     liquidNFTToken = await LiquidNFTToken.deploy(
@@ -52,16 +56,9 @@ describe("Setup of NFT Liquid tokens", function () {
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
-
-    // testing the setRewardTokena and setLiquidNFTTokens
-    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
-    expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
-    expect(
-      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -83,35 +80,21 @@ describe("Setup of NFT Liquid tokens", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
-    // testing simpleNFT min function
-    expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
-      alice.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(bob.address);
-
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
     //Set Nft price
     await (
-      await vault
-        .connect(owner)
-        .calculateNFTValue(aliceNFTTokenStakedForFraction)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForFraction)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForFraction)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForFraction)
     ).wait();
-
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(aliceNFTTokenStakedForFraction)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForFraction)).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
@@ -135,20 +118,6 @@ describe("Setup of NFT Liquid tokens", function () {
         .approve(vault.address, bobNFTTokenStakedForFraction)
     ).wait();
 
-    // test vault is now approved for tokens
-    expect(await nft.getApproved(aliceNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(bobNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(aliceNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(bobNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-
     //stake tokens for reward
     await (
       await vault
@@ -158,12 +127,6 @@ describe("Setup of NFT Liquid tokens", function () {
     await (
       await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
-
-    // test vault is owner after staking
-    expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(vault.address);
 
     // Stake others for liquid staking.
     stakeAliceFractions = await (
@@ -175,14 +138,6 @@ describe("Setup of NFT Liquid tokens", function () {
     stakeBobFractions = await (
       await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForFraction)
     ).wait();
-
-    // test vault is owner after staking
-    expect(await nft.ownerOf(aliceNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
   });
 });
 
@@ -209,10 +164,14 @@ describe("Liquid tokens of NFT", function () {
     const SimpleNFT = await ethers.getContractFactory("SimpleNFT");
     const RewardToken = await ethers.getContractFactory("RewardToken");
     const LiquidNFTToken = await ethers.getContractFactory("LiquidNFTToken");
+    const PricingMechanism = await ethers.getContractFactory(
+      "NFTPricingMechanism"
+    );
     [owner, alice, bob] = await ethers.getSigners();
     //setting up contracts
     nft = await SimpleNFT.deploy();
     vault = await Vault.deploy(nft.address);
+    pricingMechanism = await PricingMechanism.deploy();
 
     rewardToken = await RewardToken.deploy("RewardToken", "RT", vault.address);
     liquidNFTToken = await LiquidNFTToken.deploy(
@@ -223,16 +182,9 @@ describe("Liquid tokens of NFT", function () {
     const tx = await vault.setRewardToken(rewardToken.address);
     await tx.wait();
     const tx2 = await vault.setLiquidNFTToken(liquidNFTToken.address);
-
     await tx2.wait();
-
-    // testing the setRewardTokena and setLiquidNFTTokens
-    expect(await vault.liquidNFTToken()).to.eq(liquidNFTToken.address);
-    expect(await vault.rewardToken()).to.eq(rewardToken.address);
-    // testing the setRewardTokena nd setLiquidNFTTokens
-    expect(
-      vault.connect(alice).setLiquidNFTToken(liquidNFTToken.address)
-    ).to.be.revertedWith("Ownable: caller is not the owner");
+    const tx3 = await vault.setPricingMechanism(pricingMechanism.address);
+    await tx3.wait();
 
     // minting NFTs
     const transaction1 = await (await nft.mint(alice.address)).wait();
@@ -254,35 +206,21 @@ describe("Liquid tokens of NFT", function () {
       (l) => l.event === "NFTMinted"
     ).args.tokenId;
 
-    // testing simpleNFT min function
-    expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
-      alice.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(bob.address);
-
     // set NFT price
     await (
-      await vault.connect(owner).calculateNFTValue(aliceNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForReward)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForReward)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForReward)
     ).wait();
 
     //Set Nft price
     await (
-      await vault
-        .connect(owner)
-        .calculateNFTValue(aliceNFTTokenStakedForFraction)
+      await pricingMechanism.calculateNFTValue(aliceNFTTokenStakedForFraction)
     ).wait();
     await (
-      await vault.connect(owner).calculateNFTValue(bobNFTTokenStakedForFraction)
+      await pricingMechanism.calculateNFTValue(bobNFTTokenStakedForFraction)
     ).wait();
-
-    // test price calculation function and set in the nftValue mapping
-    expect(await vault.nftValue(aliceNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForReward)).to.be.above(0);
-    expect(await vault.nftValue(aliceNFTTokenStakedForFraction)).to.be.above(0);
-    expect(await vault.nftValue(bobNFTTokenStakedForFraction)).to.be.above(0);
 
     // Approve vault to transfer their NFT on their behalf.
     await (
@@ -306,20 +244,6 @@ describe("Liquid tokens of NFT", function () {
         .approve(vault.address, bobNFTTokenStakedForFraction)
     ).wait();
 
-    // test vault is now approved for tokens
-    expect(await nft.getApproved(aliceNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(bobNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(aliceNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-    expect(await nft.getApproved(bobNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-
     //stake tokens for reward
     await (
       await vault
@@ -329,12 +253,6 @@ describe("Liquid tokens of NFT", function () {
     await (
       await vault.connect(bob).stakeForRewardToken(bobNFTTokenStakedForReward)
     ).wait();
-
-    // test vault is owner after staking
-    expect(await nft.ownerOf(aliceNFTTokenStakedForReward)).to.eq(
-      vault.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForReward)).to.eq(vault.address);
 
     // Stake others for liquid staking.
     stakeAliceFractions = await (
@@ -346,14 +264,6 @@ describe("Liquid tokens of NFT", function () {
     stakeBobFractions = await (
       await vault.connect(bob).stakeForLiquidNFT(bobNFTTokenStakedForFraction)
     ).wait();
-
-    // test vault is owner after staking
-    expect(await nft.ownerOf(aliceNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
-    expect(await nft.ownerOf(bobNFTTokenStakedForFraction)).to.eq(
-      vault.address
-    );
   });
 
   it("When Staking for Liquid tokens, events should log proper data", async function () {
